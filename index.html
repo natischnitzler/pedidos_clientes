@@ -932,7 +932,7 @@ table.grid tr:last-child td { border-bottom:none; }
 // ── CONFIG ───────────────────────────────────────────────────────
 // Todo va por el backend — sin CORS
 
-const BACKEND = 'https://temponovo-portal-api.onrender.com';
+const BACKEND = 'https://pedidos-clientes.onrender.com';
 
 // ── STATE ────────────────────────────────────────────────────────
 var apiKey       = '';
@@ -971,6 +971,18 @@ async function doLogin() {
     if (!Array.isArray(data) || !data.length) throw new Error('Sin productos disponibles');
 
     apiKey = key;
+
+    // Obtener nombre del cliente
+    try {
+      var meRes = await fetch(BACKEND + '/api/me', {
+        headers: { 'Authorization': key }
+      });
+      if (meRes.ok) {
+        var me = await meRes.json();
+        clientName = me.name || 'Cliente';
+      }
+    } catch(e) { clientName = 'Cliente'; }
+
     stockData = data.map(function(p) {
       return {
         sku:     p.Default_code || '',
@@ -1032,35 +1044,70 @@ function fmt(n) {
   return '$' + Number(n||0).toLocaleString('es-CL');
 }
 
-// ── STOCK LOOKUP ─────────────────────────────────────────────────
-var stockIndex = null;
+// ── SMART LOOKUP ─────────────────────────────────────────────────
+var _idx = null;
+
 function buildIndex() {
-  if (stockIndex) return;
-  stockIndex = {};
+  if (_idx) return;
+  _idx = { sku:{}, codba:{} };
   stockData.forEach(function(p) {
-    // by SKU
     var sk = normalize(p.sku);
-    if (sk) stockIndex[sk] = p;
-    // by barcode
     var cb = normalize(p.codba);
-    if (cb) stockIndex[cb] = p;
+    if (sk) _idx.sku[sk]   = p;
+    if (cb) _idx.codba[cb] = p;
   });
 }
 
 function lookup(raw) {
+  if (!raw || !raw.trim()) return null;
   buildIndex();
   var key = normalize(raw);
-  if (!key) return null;
-  if (stockIndex[key]) return stockIndex[key];
-  // truncated barcode (drop last digit)
+  if (!key || key.length < 2) return null;
+
+  // 1. Exacto SKU
+  if (_idx.sku[key]) return _idx.sku[key];
+
+  // 2. Exacto barcode
+  if (_idx.codba[key]) return _idx.codba[key];
+
+  // 3. SKU sin ultimo digito (check digit)
+  if (key.length > 3) {
+    var t = key.slice(0,-1);
+    if (_idx.sku[t]) return _idx.sku[t];
+  }
+
+  // 4. Barcode sin ultimo digito
   if (key.length > 4) {
-    var trunc = key.slice(0,-1);
-    if (stockIndex[trunc]) return stockIndex[trunc];
+    var t2 = key.slice(0,-1);
+    if (_idx.codba[t2]) return _idx.codba[t2];
   }
-  // partial SKU match
-  for (var k in stockIndex) {
-    if (k.startsWith(key) || key.startsWith(k)) return stockIndex[k];
+
+  // 5. SKU prefijo
+  var skuKeys = Object.keys(_idx.sku);
+  for (var i=0; i<skuKeys.length; i++) {
+    var k = skuKeys[i];
+    if (k.length >= 4 && (k.startsWith(key) || key.startsWith(k))) return _idx.sku[k];
   }
+
+  // 6. Barcode prefijo
+  var cbKeys = Object.keys(_idx.codba);
+  for (var i=0; i<cbKeys.length; i++) {
+    var k = cbKeys[i];
+    if (k.length >= 6 && (k.startsWith(key) || key.startsWith(k))) return _idx.codba[k];
+  }
+
+  // 7. Descripcion: todas las palabras del input en el nombre
+  var words = raw.trim().toUpperCase().split(/[\s\-_]+/).filter(function(w) { return w.length > 1; });
+  if (words.length > 0) {
+    var best = null;
+    stockData.forEach(function(p) {
+      var des = (p.des||'').toUpperCase();
+      var allMatch = words.every(function(w) { return des.includes(w); });
+      if (allMatch && !best) best = p;
+    });
+    if (best) return best;
+  }
+
   return null;
 }
 

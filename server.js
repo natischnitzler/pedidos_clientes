@@ -176,6 +176,30 @@ app.get('/api/deuda', requireApiKey, async (req, res) => {
   }
 });
 
+
+// ── GET /api/me ───────────────────────────────────────────────────
+// Devuelve nombre del cliente según su API key
+app.get('/api/me', requireApiKey, async (req, res) => {
+  try {
+    const partners = await xmlrpcCall('res.partner', 'search_read', [
+      [['x_api_key', '=', req.apiKey]],
+      ['id', 'name', 'email', 'phone']
+    ]);
+    if (!partners || !partners.length) {
+      return res.status(404).json({ error: 'Cliente no encontrado' });
+    }
+    res.json({
+      id:    partners[0].id,
+      name:  partners[0].name,
+      email: partners[0].email || '',
+      phone: partners[0].phone || ''
+    });
+  } catch(e) {
+    console.error('❌ /api/me', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── Health check ──────────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 
