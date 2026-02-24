@@ -165,8 +165,7 @@ app.get('/api/historial', requireApiKey, async (req, res) => {
     // 2. Buscar ventas del partner
     const ventas = await xmlrpcCall('sale.order', 'search_read', [
       [['partner_id', '=', partnerId]],
-      ['name', 'date_order', 'state', 'amount_total',
-       'tempo_observation', 'tempo_type_sale', 'order_line'],
+      ['name', 'date_order', 'state', 'amount_total', 'order_line', 'note'],
       0, 100, 'date_order desc'
     ]);
 
@@ -175,7 +174,7 @@ app.get('/api/historial', requireApiKey, async (req, res) => {
       let productos = [];
       if (v.order_line && v.order_line.length) {
         const lines = await xmlrpcCall('sale.order.line', 'search_read', [
-          [[['order_id', '=', v.id]]],
+          [['order_id', '=', v.id]],
           ['product_id', 'product_uom_qty', 'price_unit', 'default_code']
         ]);
         productos = lines.map(function(l) {
@@ -191,8 +190,7 @@ app.get('/api/historial', requireApiKey, async (req, res) => {
         id:     v.id,
         nombre: v.name,
         fecha:  v.date_order ? v.date_order.split(' ')[0] : '',
-        tipo:   v.tempo_type_sale || '',
-        obs:    v.tempo_observation || '',
+        obs:    v.note || '',
         estado: v.state,
         total:  v.amount_total,
         productos: productos
