@@ -175,12 +175,16 @@ app.get('/api/historial', requireApiKey, async (req, res) => {
       if (v.order_line && v.order_line.length) {
         const lines = await xmlrpcCall('sale.order.line', 'search_read', [
           [['order_id', '=', v.id]],
-          ['product_id', 'product_uom_qty', 'price_unit', 'default_code']
+          ['product_id', 'product_uom_qty', 'price_unit']
         ]);
         productos = lines.map(function(l) {
+          const nombre = l.product_id ? l.product_id[1] : '';
+          // Extraer SKU del nombre: "[CS-MQ247B2] RELOJ CASIO..."
+          const skuMatch = nombre.match(/^\[([^\]]+)\]/);
+          const sku = skuMatch ? skuMatch[1] : nombre;
           return {
-            Sku:      l.default_code || (l.product_id ? l.product_id[1] : ''),
-            Producto: l.product_id ? l.product_id[1] : '',
+            Sku:      sku,
+            Producto: nombre.replace(/^\[[^\]]+\]\s*/, ''),
             Cantidad: l.product_uom_qty,
             Precio:   l.price_unit
           };
