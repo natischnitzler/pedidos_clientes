@@ -164,7 +164,7 @@ app.get('/api/historial', requireApiKey, async (req, res) => {
 
     // 2. Buscar ventas del partner
     const ventas = await xmlrpcCall('sale.order', 'search_read', [
-      [[['partner_id', '=', partnerId]]],
+      [['partner_id', '=', partnerId]],
       ['name', 'date_order', 'state', 'amount_total',
        'tempo_observation', 'tempo_type_sale', 'order_line'],
       0, 100, 'date_order desc'
@@ -216,12 +216,12 @@ app.get('/api/deuda', requireApiKey, async (req, res) => {
 
     // 2. Obtener facturas pendientes (account.move)
     const facturas = await xmlrpcCall('account.move', 'search_read', [
-      [[
+      [
         ['partner_id',    '=',  partnerId],
         ['move_type',     '=',  'out_invoice'],
         ['payment_state', 'in', ['not_paid', 'partial']],
         ['state',         '=',  'posted']
-      ]],
+      ],
       ['name', 'invoice_date', 'invoice_date_due', 'amount_residual', 'payment_state']
     ]);
 
