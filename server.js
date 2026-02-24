@@ -162,11 +162,16 @@ app.get('/api/historial', requireApiKey, async (req, res) => {
     // 1. Buscar partner
     const partnerId = req.partnerId;
 
-    // 2. Buscar ventas del partner
+    // 2. Buscar ventas del partner (filtrar por fecha si se pasa)
+    const fromDate = req.query.from || null;
+    const toDate   = req.query.to   || null;
+    const domain   = [['partner_id', '=', partnerId]];
+    if (fromDate) domain.push(['date_order', '>=', fromDate + ' 00:00:00']);
+    if (toDate)   domain.push(['date_order', '<=', toDate   + ' 23:59:59']);
     const ventas = await xmlrpcCall('sale.order', 'search_read', [
-      [['partner_id', '=', partnerId]],
+      domain,
       ['name', 'date_order', 'state', 'amount_total', 'order_line', 'note'],
-      0, 100, 'date_order desc'
+      0, 200, 'date_order desc'
     ]);
 
     // 3. Para cada venta obtener sus líneas
