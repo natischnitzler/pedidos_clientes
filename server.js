@@ -170,7 +170,7 @@ app.get('/api/historial', requireApiKey, async (req, res) => {
     if (toDate)   domain.push(['date_order', '<=', toDate   + ' 23:59:59']);
     const ventas = await xmlrpcCall('sale.order', 'search_read', [
       domain,
-      ['name', 'date_order', 'state', 'invoice_status', 'amount_total', 'order_line', 'note'],
+      ['name', 'date_order', 'state', 'invoice_status', 'amount_total', 'order_line', 'note', 'invoice_ids'],
       0, 200, 'date_order desc'
     ]);
 
@@ -197,13 +197,32 @@ app.get('/api/historial', requireApiKey, async (req, res) => {
       }
       // Estado: si invoice_status=invoiced -> done (facturado)
       const estado = v.invoice_status === 'invoiced' ? 'done' : (v.state || 'draft');
+
+      // Facturas asociadas
+      let facturas = [];
+      if (v.invoice_ids && v.invoice_ids.length) {
+        try {
+          const invs = await xmlrpcCall('account.move', 'read', [
+            v.invoice_ids,
+            ['id', 'name', 'state', 'payment_state']
+          ]);
+          facturas = invs
+            .filter(i => i.state === 'posted')
+            .map(i => ({
+              id:   i.id,
+              name: i.name
+            }));
+        } catch(e) { /* ignorar */ }
+      }
+
       return {
-        id:       v.id,
-        nombre:   v.name,
-        fecha:    v.date_order ? v.date_order.split(' ')[0] : '',
-        obs:      v.note || '',
-        estado:   estado,
-        total:    v.amount_total,
+        id:        v.id,
+        nombre:    v.name,
+        fecha:     v.date_order ? v.date_order.split(' ')[0] : '',
+        obs:       v.note || '',
+        estado:    estado,
+        total:     v.amount_total,
+        facturas:  facturas,
         productos: productos
       };
     }));
@@ -306,7 +325,7 @@ app.get('/api/deuda', requireApiKey, async (req, res) => {
       facturas.push({
         doc:         docLabel,
         move_name:   moveName,
-        ref:         move.ref || '',
+        ref:         move.invoice_origin || move.ref || '',
         fecha:       move.invoice_date || l.date || '',
         vencimiento: l.date_maturity   || move.invoice_date_due || '',
         dias:        dias,
