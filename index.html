@@ -930,9 +930,9 @@ table.grid tr:last-child td { border-bottom:none; }
 
 <script>
 // ── CONFIG ───────────────────────────────────────────────────────
-const ODOO_BASE = 'https://temponovo.odoo.com';
-// Backend Render para deuda/facturas (pendiente deploy)
-const BACKEND   = 'https://temponovo-portal-api.onrender.com';
+// Todo va por el backend — sin CORS
+
+const BACKEND = 'https://temponovo-portal-api.onrender.com';
 
 // ── STATE ────────────────────────────────────────────────────────
 var apiKey       = '';
@@ -963,7 +963,7 @@ async function doLogin() {
   err.style.display = 'none';
 
   try {
-    var res = await fetch(ODOO_BASE + '/api/stock', {
+    var res = await fetch(BACKEND + '/api/stock', {
       headers: { 'Authorization': key }
     });
     if (!res.ok) throw new Error('API Key inválida');
@@ -1235,7 +1235,7 @@ async function sendOrder() {
   document.getElementById('btn-send').textContent = 'Enviando...';
 
   try {
-    var res = await fetch(ODOO_BASE + '/sale/create', {
+    var res = await fetch(BACKEND + '/api/pedido', {
       method: 'POST',
       headers: { 'Authorization': apiKey, 'Content-Type': 'application/json' },
       body: JSON.stringify({ data: {
