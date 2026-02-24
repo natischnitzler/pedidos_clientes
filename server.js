@@ -208,42 +208,117 @@ app.get('/api/historial', requireApiKey, async (req, res) => {
   }
 });
 
-// ── GET /api/deuda ────────────────────────────────────────────────
-// Usa XML-RPC con credenciales propias — busca partner por API key
-// y devuelve sus cuentas por cobrar vencidas
+// ── GET /api/deuda ───────────────────────────────────────────────
+// Igual que el reporte de vendedores: usa account.move.line con
+// cuentas A110402 para capturar FAC, ND, NC y asientos APER/
 app.get('/api/deuda', requireApiKey, async (req, res) => {
   try {
-    // 1. Buscar partner que tenga esta API key
     const partnerId = req.partnerId;
+    const hoy = new Date();
 
-    // 2. Obtener facturas pendientes (account.move)
-    const facturas = await xmlrpcCall('account.move', 'search_read', [
-      [
-        ['partner_id',    '=',  partnerId],
-        ['move_type',     '=',  'out_invoice'],
-        ['payment_state', 'in', ['not_paid', 'partial']],
-        ['state',         '=',  'posted']
-      ],
-      ['name', 'invoice_date', 'invoice_date_due', 'amount_residual', 'payment_state']
+    // 1. Buscar cuentas por cobrar (A110402)
+    let receivableIds = await xmlrpcCall('account.account', 'search', [
+      [['code', '=like', 'A110402%']]
+    ]);
+    if (!receivableIds.length) {
+      receivableIds = await xmlrpcCall('account.account', 'search', [
+        [['account_type', '=', 'asset_receivable']]
+      ]);
+    }
+    if (!receivableIds.length) {
+      return res.status(500).json({ error: 'No se encontraron cuentas por cobrar' });
+    }
+
+    // 2. Líneas no reconciliadas de ese partner
+    const amlIds = await xmlrpcCall('account.move.line', 'search', [[
+      ['account_id',        'in',  receivableIds],
+      ['move_id.state',     '=',   'posted'],
+      ['partner_id',        '=',   partnerId],
+      ['full_reconcile_id', '=',   false]
+    ]]);
+
+    if (!amlIds.length) return res.json({ facturas: [], resumen: {} });
+
+    const amlList = await xmlrpcCall('account.move.line', 'read', [
+      amlIds,
+      ['move_id', 'date_maturity', 'date', 'debit', 'credit',
+       'amount_residual', 'full_reconcile_id', 'name']
     ]);
 
-    // 3. Calcular tramo por fecha de vencimiento
-    const hoy = new Date();
-    const result = facturas.map(function(f) {
-      const venc  = f.invoice_date_due ? new Date(f.invoice_date_due) : null;
-      const dias  = venc ? Math.floor((hoy - venc) / 86400000) : 0;
-      const tramo = dias > 0 ? 'vencido' : 'al_dia';
-      return {
-        num:         f.name,
-        fecha:       f.invoice_date       || '',
-        vencimiento: f.invoice_date_due   || '',
-        monto:       f.amount_residual    || 0,
-        tramo:       tramo,
-        dias_vencido: dias > 0 ? dias : 0
-      };
+    // Filtrar: saldo real > 0
+    const lineas = amlList.filter(l =>
+      !l.full_reconcile_id &&
+      (parseFloat(l.amount_residual || 0) > 0 ||
+       parseFloat(l.debit || 0) > parseFloat(l.credit || 0))
+    );
+
+    if (!lineas.length) return res.json({ facturas: [], resumen: {} });
+
+    // 3. Prefetch datos del asiento (nombre, fecha)
+    const moveIds = [...new Set(lineas.map(l => Array.isArray(l.move_id) ? l.move_id[0] : l.move_id).filter(Boolean))];
+    const moves   = await xmlrpcCall('account.move', 'read', [
+      moveIds,
+      ['id', 'name', 'ref', 'invoice_date', 'invoice_date_due', 'move_type']
+    ]);
+    const moveMap = {};
+    moves.forEach(m => moveMap[m.id] = m);
+
+    // 4. Armar facturas con tramos
+    const today = new Date(); today.setHours(0,0,0,0);
+    const facturas = [];
+
+    lineas.forEach(l => {
+      const saldo = parseFloat(l.amount_residual || 0);
+      if (saldo <= 0) return;
+
+      const moveId  = Array.isArray(l.move_id) ? l.move_id[0] : l.move_id;
+      const move    = moveMap[moveId] || {};
+      const ref     = (move.ref || '').toLowerCase();
+
+      // Excluir cheques en cartera
+      if (ref.includes('cheque') && ref.includes('cartera')) return;
+
+      const fechaVenc = new Date(l.date_maturity || move.invoice_date_due || l.date || today);
+      const dias = Math.floor((today - fechaVenc) / 86400000);
+
+      let tramo = 'al_dia';
+      if      (dias <= 0)   tramo = 'al_dia';
+      else if (dias <= 30)  tramo = 'd_1_30';
+      else if (dias <= 60)  tramo = 'd_31_60';
+      else if (dias <= 90)  tramo = 'd_61_90';
+      else if (dias <= 120) tramo = 'd_91_120';
+      else                  tramo = 'antiguos';
+
+      const moveName = move.name || '';
+      const lineNom  = (l.name || '').trim();
+      let   docLabel = moveName;
+      if (moveName.startsWith('APER/') && lineNom && lineNom !== '/') {
+        docLabel = moveName + ' – ' + lineNom;
+      }
+
+      facturas.push({
+        doc:        docLabel,
+        move_name:  moveName,
+        fecha:      move.invoice_date || l.date || '',
+        vencimiento: l.date_maturity  || move.invoice_date_due || '',
+        dias:       dias,
+        tramo:      tramo,
+        saldo:      saldo,
+        move_id:    moveId
+      });
     });
 
-    res.json(result);
+    // 5. Resumen por tramo
+    const resumen = { al_dia: 0, d_1_30: 0, d_31_60: 0, d_61_90: 0, d_91_120: 0, antiguos: 0, total: 0 };
+    facturas.forEach(f => {
+      resumen[f.tramo] = (resumen[f.tramo] || 0) + f.saldo;
+      resumen.total    += f.saldo;
+    });
+
+    // Ordenar por fecha
+    facturas.sort((a, b) => a.fecha > b.fecha ? -1 : 1);
+
+    res.json({ facturas, resumen });
   } catch(e) {
     console.error('❌ /api/deuda', e.message);
     res.status(500).json({ error: e.message });
