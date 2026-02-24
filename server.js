@@ -11,6 +11,26 @@ const ODOO_DB   = 'cmcorpcl-temponovo-main-24490235';
 const ODOO_USER = 'natalia@temponovo.cl';
 const ODOO_PASS = process.env.ODOO_PASSWORD || '';
 
+
+// ── CLIENTES ─────────────────────────────────────────────────────
+// Agregar nuevos clientes aquí
+const CLIENTES = {
+  'LARELOJERIA': {
+    apiKey:    process.env.APIKEY_LARELOJERIA || '22f7ebb65ec6646888a4c22028a854e39e310b31c5461cc52d22e835d92d5bd6',
+    partnerId: 51666,
+    name:      'La Relojería SPA'
+  }
+  // 'OTOCLIENTE': {
+  //   apiKey:    process.env.APIKEY_OTOCLIENTE || '',
+  //   partnerId: 12345,
+  //   name:      'Otro Cliente'
+  // }
+};
+
+function getCliente(code) {
+  return CLIENTES[(code||'').toUpperCase()] || null;
+}
+
 // ── AUTH CACHE ───────────────────────────────────────────────────
 let cachedUID    = null;
 let lastAuthTime = 0;
@@ -75,19 +95,26 @@ async function odooProxy(path, apiKey, options = {}) {
   return { ok: res.ok, status: res.status, data };
 }
 
-// ── MIDDLEWARE: validar API key ───────────────────────────────────
+// ── MIDDLEWARE: validar código de cliente ────────────────────────
 async function requireApiKey(req, res, next) {
-  const key = req.headers['authorization'];
-  if (!key) return res.status(401).json({ error: 'API key requerida' });
-  req.apiKey = key;
+  const code = (req.headers['x-client-code'] || '').toUpperCase();
+  if (!code) return res.status(401).json({ error: 'Código de cliente requerido' });
+  const cliente = getCliente(code);
+  if (!cliente) return res.status(401).json({ error: 'Cliente no reconocido' });
+  req.apiKey    = cliente.apiKey;
+  req.partnerId = cliente.partnerId;
+  req.clientName = cliente.name;
   next();
 }
 
 // ── GET /api/stock ────────────────────────────────────────────────
 // Proxy a Odoo REST con la API key del cliente (incluye sus precios)
-app.get('/api/stock', requireApiKey, async (req, res) => {
+app.get('/api/stock', async (req, res) => {
   try {
-    const r = await odooProxy('/api/stock', req.apiKey);
+    const code    = (req.headers['x-client-code'] || '').toUpperCase();
+    const cliente = getCliente(code);
+    if (!cliente) return res.status(401).json({ error: 'Código no reconocido' });
+    const r = await odooProxy('/api/stock', cliente.apiKey);
     if (!r.ok) return res.status(r.status).json({ error: 'Error Odoo stock', detail: r.data });
     res.json(r.data);
   } catch(e) {
@@ -133,14 +160,7 @@ app.get('/api/sale', requireApiKey, async (req, res) => {
 app.get('/api/historial', requireApiKey, async (req, res) => {
   try {
     // 1. Buscar partner
-    const partners = await xmlrpcCall('res.partner', 'search_read', [
-      [['x_api_key', '=', req.apiKey]],
-      ['id', 'name']
-    ]);
-    if (!partners || !partners.length) {
-      return res.status(404).json({ error: 'Cliente no encontrado' });
-    }
-    const partnerId = partners[0].id;
+    const partnerId = req.partnerId;
 
     // 2. Buscar ventas del partner
     const ventas = await xmlrpcCall('sale.order', 'search_read', [
@@ -192,14 +212,7 @@ app.get('/api/historial', requireApiKey, async (req, res) => {
 app.get('/api/deuda', requireApiKey, async (req, res) => {
   try {
     // 1. Buscar partner que tenga esta API key
-    const partners = await xmlrpcCall('res.partner', 'search_read', [
-      [['x_api_key', '=', req.apiKey]],
-      ['id', 'name']
-    ]);
-    if (!partners || !partners.length) {
-      return res.status(404).json({ error: 'Cliente no encontrado' });
-    }
-    const partnerId = partners[0].id;
+    const partnerId = req.partnerId;
 
     // 2. Obtener facturas pendientes (account.move)
     const facturas = await xmlrpcCall('account.move', 'search_read', [
@@ -237,26 +250,13 @@ app.get('/api/deuda', requireApiKey, async (req, res) => {
 
 
 // ── GET /api/me ───────────────────────────────────────────────────
-// Devuelve nombre del cliente según su API key
-app.get('/api/me', requireApiKey, async (req, res) => {
-  try {
-    const partners = await xmlrpcCall('res.partner', 'search_read', [
-      [['x_api_key', '=', req.apiKey]],
-      ['id', 'name', 'email', 'phone']
-    ]);
-    if (!partners || !partners.length) {
-      return res.status(404).json({ error: 'Cliente no encontrado' });
-    }
-    res.json({
-      id:    partners[0].id,
-      name:  partners[0].name,
-      email: partners[0].email || '',
-      phone: partners[0].phone || ''
-    });
-  } catch(e) {
-    console.error('❌ /api/me', e.message);
-    res.status(500).json({ error: e.message });
-  }
+app.get('/api/me', (req, res) => {
+  const code    = (req.headers['x-client-code'] || '').toUpperCase();
+  const cliente = getCliente(code);
+  if (!cliente) return res.status(401).json({ error: 'Código no reconocido' });
+  req.clientName = cliente.name;
+  req.partnerId  = cliente.partnerId;
+  res.json({ name: req.clientName, partnerId: req.partnerId });
 });
 
 // ── Health check ──────────────────────────────────────────────────
