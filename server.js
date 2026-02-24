@@ -127,6 +127,65 @@ app.get('/api/sale', requireApiKey, async (req, res) => {
   }
 });
 
+
+// ── GET /api/historial ────────────────────────────────────────────
+// Devuelve todos los pedidos del cliente según su API key
+app.get('/api/historial', requireApiKey, async (req, res) => {
+  try {
+    // 1. Buscar partner
+    const partners = await xmlrpcCall('res.partner', 'search_read', [
+      [['x_api_key', '=', req.apiKey]],
+      ['id', 'name']
+    ]);
+    if (!partners || !partners.length) {
+      return res.status(404).json({ error: 'Cliente no encontrado' });
+    }
+    const partnerId = partners[0].id;
+
+    // 2. Buscar ventas del partner
+    const ventas = await xmlrpcCall('sale.order', 'search_read', [
+      [[['partner_id', '=', partnerId]]],
+      ['name', 'date_order', 'state', 'amount_total',
+       'tempo_observation', 'tempo_type_sale', 'order_line'],
+      0, 100, 'date_order desc'
+    ]);
+
+    // 3. Para cada venta obtener sus líneas
+    const result = await Promise.all(ventas.map(async function(v) {
+      let productos = [];
+      if (v.order_line && v.order_line.length) {
+        const lines = await xmlrpcCall('sale.order.line', 'search_read', [
+          [[['order_id', '=', v.id]]],
+          ['product_id', 'product_uom_qty', 'price_unit', 'default_code']
+        ]);
+        productos = lines.map(function(l) {
+          return {
+            Sku:      l.default_code || (l.product_id ? l.product_id[1] : ''),
+            Producto: l.product_id ? l.product_id[1] : '',
+            Cantidad: l.product_uom_qty,
+            Precio:   l.price_unit
+          };
+        });
+      }
+      return {
+        id:     v.id,
+        nombre: v.name,
+        fecha:  v.date_order ? v.date_order.split(' ')[0] : '',
+        tipo:   v.tempo_type_sale || '',
+        obs:    v.tempo_observation || '',
+        estado: v.state,
+        total:  v.amount_total,
+        productos: productos
+      };
+    }));
+
+    res.json(result);
+  } catch(e) {
+    console.error('❌ /api/historial', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ── GET /api/deuda ────────────────────────────────────────────────
 // Usa XML-RPC con credenciales propias — busca partner por API key
 // y devuelve sus cuentas por cobrar vencidas
