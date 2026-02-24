@@ -663,15 +663,11 @@ table.grid tr:last-child td { border-bottom:none; }
     </div>
     <div class="login-title">Portal de Clientes</div>
     <div class="login-sub">Ingresa tu API Key para continuar</div>
-    <label class="login-label" for="api-key-input">API Key</label>
-    <input id="api-key-input" class="login-input" type="password"
-           placeholder="••••••••••••••••"
-           onkeydown="if(event.key==='Enter') doLogin()"/>
-    <label class="login-label" style="margin-top:12px" for="client-code-input">Código de cliente</label>
+    <label class="login-label" for="client-code-input">Código de acceso</label>
     <input id="client-code-input" class="login-input" type="text"
-           placeholder="Ej: S01991"
+           placeholder="Ej: LARELOJERIA"
            onkeydown="if(event.key==='Enter') doLogin()"
-           style="font-family:'DM Mono',monospace;letter-spacing:1px"/>
+           style="text-transform:uppercase;letter-spacing:1px"/>
     <button class="login-btn" id="login-btn" onclick="doLogin()">Ingresar</button>
     <div class="login-error" id="login-error"></div>
   </div>
@@ -876,15 +872,36 @@ table.grid tr:last-child td { border-bottom:none; }
       <div id="hist-loading" class="loading" style="display:none">
         <div class="spinner"></div> Cargando historial...
       </div>
+      <div class="filters-row" style="margin-bottom:12px">
+        <input id="hist-search" class="filter-input" type="text"
+          placeholder="Buscar venta..."
+          oninput="filterHist()" style="max-width:200px"/>
+        <input id="hist-from" class="filter-input" type="date" onchange="loadHistorial()" style="max-width:150px"/>
+        <input id="hist-to"   class="filter-input" type="date" onchange="loadHistorial()" style="max-width:150px"/>
+        <select id="hist-estado" class="filter-select" onchange="filterHist()">
+          <option value="">Todos los estados</option>
+          <option value="sale">Confirmado</option>
+          <option value="done">Facturado</option>
+          <option value="draft">Borrador</option>
+          <option value="cancel">Cancelado</option>
+        </select>
+        <button class="btn btn-outline btn-sm" onclick="clearHistFilters()">Limpiar</button>
+        <span id="hist-count" style="font-size:12px;color:var(--text-light)"></span>
+      </div>
       <div style="overflow-x:auto">
         <table class="htable">
           <thead><tr>
-            <th>Venta</th><th>Fecha</th><th>Tipo</th>
-            <th>Observaciones</th><th>Líneas</th><th></th>
+            <th onclick="sortHist('nombre')" style="cursor:pointer">Venta <span id="sh-nombre"></span></th>
+            <th onclick="sortHist('fecha')"  style="cursor:pointer">Fecha <span id="sh-fecha"></span></th>
+            <th>Estado</th>
+            <th onclick="sortHist('total')"  style="cursor:pointer;text-align:right">Total <span id="sh-total"></span></th>
+            <th style="text-align:center">Líneas</th>
+            <th></th>
           </tr></thead>
           <tbody id="hist-body"><tr><td colspan="6" class="empty-row">No hay pedidos aún</td></tr></tbody>
         </table>
       </div>
+      <div id="hist-pagination" style="display:flex;align-items:center;justify-content:center;gap:12px;margin-top:12px"></div>
     </div>
 
     <!-- ── DEUDA ──────────────────────────────────────────────── -->
@@ -893,21 +910,31 @@ table.grid tr:last-child td { border-bottom:none; }
         <div class="page-title" style="margin-bottom:0">Cuenta por Cobrar</div>
         <button class="btn btn-outline btn-sm" onclick="loadDeuda()">↻ Actualizar</button>
       </div>
-      <div id="deuda-kpis" style="display:none">
-        <div class="kpi-grid" id="deuda-cards"></div>
-      </div>
       <div id="deuda-loading" class="loading" style="display:none">
         <div class="spinner"></div> Consultando Odoo...
+      </div>
+      <div id="deuda-kpis" style="display:none">
+        <div class="kpi-grid" id="deuda-cards"></div>
+
       </div>
       <div id="deuda-result" style="display:none">
         <div class="filters-row">
           <input id="deuda-search" class="filter-input" type="text"
             placeholder="Buscar factura..."
-            oninput="filterDeuda()" style="max-width:280px"/>
-          <select id="deuda-tramo" class="filter-select" onchange="filterDeuda()">
+            oninput="filterDeuda()" style="max-width:220px"/>
+          <select id="deuda-tramo-sel" class="filter-select" onchange="filterDeuda()">
             <option value="">Todos los tramos</option>
             <option value="al_dia">Al día</option>
-            <option value="vencido">Vencido</option>
+            <option value="1-30">1-30 días</option>
+            <option value="31-60">31-60 días</option>
+            <option value="61-90">61-90 días</option>
+            <option value="91-120">91-120 días</option>
+            <option value="antiguos">Antiguos</option>
+          </select>
+          <select id="deuda-tipo-sel" class="filter-select" onchange="filterDeuda()">
+            <option value="">Todos los tipos</option>
+            <option value="FAC">Facturas</option>
+            <option value="APER">Apertura</option>
           </select>
           <span id="deuda-count" style="font-size:12px;color:var(--text-light)"></span>
           <button class="btn btn-outline btn-sm" onclick="dlDeudaCSV()">↓ CSV</button>
@@ -915,11 +942,15 @@ table.grid tr:last-child td { border-bottom:none; }
         <div style="overflow-x:auto">
           <table class="htable">
             <thead><tr>
-              <th>Factura</th><th>Fecha</th><th>Vencimiento</th>
-              <th>Tramo</th><th style="text-align:right">Monto</th>
+              <th>Factura</th><th>Ref. Pedido</th><th>Tipo</th><th>Fecha</th>
+              <th>Vencimiento</th><th style="text-align:right">Monto</th><th></th>
             </tr></thead>
             <tbody id="deuda-body"></tbody>
           </table>
+        </div>
+        <div id="deuda-total-row" style="background:var(--white);border-radius:var(--radius);padding:12px 16px;margin-top:8px;box-shadow:var(--shadow);display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:12px;font-weight:500;color:var(--text-muted)">Total filtrado</span>
+          <span id="deuda-total-val" style="font-size:16px;font-weight:700;color:var(--teal)"></span>
         </div>
       </div>
       <div id="deuda-empty" style="display:none;text-align:center;padding:40px;color:var(--text-light);font-size:14px">
@@ -949,8 +980,9 @@ table.grid tr:last-child td { border-bottom:none; }
     <button class="modal-close" onclick="closeModal('modal-detail')">×</button>
     <div class="modal-title" id="dt-title"></div>
     <div id="dt-body"></div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap">
       <button class="btn btn-outline btn-sm" onclick="dlHistCSV()">↓ CSV</button>
+      <button class="btn btn-outline btn-sm" onclick="dlHistPDF()">↓ PDF Odoo</button>
       <button class="btn btn-outline btn-sm" onclick="closeModal('modal-detail')">Cerrar</button>
     </div>
   </div>
@@ -988,9 +1020,14 @@ const GRID_SIZE  = 20;
 var CATS = {};
 
 // ── LOGIN ────────────────────────────────────────────────────────
+
+
+
+
+// ── LOGIN ────────────────────────────────────────────────────────
 async function doLogin() {
-  var key = document.getElementById('api-key-input').value.trim();
-  if (!key) return;
+  var code = document.getElementById('client-code-input').value.trim().toUpperCase();
+  if (!code) return;
   var btn = document.getElementById('login-btn');
   var err = document.getElementById('login-error');
   btn.disabled = true;
@@ -998,67 +1035,54 @@ async function doLogin() {
   err.style.display = 'none';
 
   try {
-    var res = await fetch(BACKEND + '/api/stock', {
-      headers: { 'Authorization': key }
+    // 1. Validar cliente y obtener nombre
+    var meRes = await fetch(BACKEND + '/api/me', {
+      headers: { 'X-Client-Code': code }
     });
-    if (!res.ok) throw new Error('API Key inválida');
+    if (!meRes.ok) throw new Error('Código de acceso inválido');
+    var me = await meRes.json();
+    clientName = me.name || code;
+    clientCode = code;
+    document.getElementById('header-client').textContent = clientName;
+
+    // 2. Cargar stock
+    var res = await fetch(BACKEND + '/api/stock', {
+      headers: { 'X-Client-Code': code }
+    });
+    if (!res.ok) throw new Error('Error al cargar productos');
     var data = await res.json();
     if (!Array.isArray(data) || !data.length) throw new Error('Sin productos disponibles');
 
-    apiKey = key;
-
-    // Obtener nombre del cliente
-    var code = document.getElementById('client-code-input').value.trim();
-    try {
-      var meRes = await fetch(BACKEND + '/api/me', {
-        headers: { 'Authorization': key, 'X-Client-Code': code }
-      });
-      if (meRes.ok) {
-        var me = await meRes.json();
-        clientName   = me.name || code || 'Cliente';
-        clientCode   = me.ref  || code || '';
-        document.getElementById('header-client').textContent = clientName;
-      }
-    } catch(e) { clientName = code || 'Cliente'; }
-
+    apiKey = code;
     stockData = data.map(function(p) {
       return {
-        sku:     p.Default_code || '',
-        des:     p.Name         || '',
-        stock:   p.Stock        != null ? p.Stock : 0,
-        precio:  p.Price        || 0,
-        codba:   p.Barcode      || '',
-        fam:     p.Tempo_family || p.Parent_category || '',
-        cat:     p.Parent_category || '',
+        sku:   p.Default_code || '',
+        des:   p.Name         || '',
+        stock: p.Stock        != null ? p.Stock : 0,
+        precio: p.Price       || 0,
+        codba: p.Barcode      || '',
+        fam:   p.Tempo_family || p.Parent_category || '',
+        cat:   p.Parent_category || '',
       };
     });
 
-    // Build client name from first product category or use generic
-    clientName = 'Cliente';
-    document.getElementById('header-client').textContent = clientName;
-    document.getElementById('stock-info').textContent =
-      stockData.length.toLocaleString('es-CL') + ' productos';
-
     buildCats();
     initGrid();
+
+    document.getElementById('stock-info').textContent =
+      stockData.length.toLocaleString('es-CL') + ' productos';
 
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app').style.display = 'block';
 
   } catch(e) {
-    err.textContent = e.message || 'Error al conectar con Odoo';
+    err.textContent = e.message || 'Error al conectar';
     err.style.display = 'block';
   }
   btn.disabled = false;
   btn.textContent = 'Ingresar';
 }
 
-function doLogout() {
-  apiKey = ''; clientName = ''; stockData = []; orderHistory = [];
-  document.getElementById('api-key-input').value = '';
-  document.getElementById('app').style.display = 'none';
-  document.getElementById('login-screen').style.display = 'flex';
-}
 
 // ── NAV ──────────────────────────────────────────────────────────
 function showSec(name, btn) {
@@ -1073,11 +1097,14 @@ function showSec(name, btn) {
 
 // ── HELPERS ──────────────────────────────────────────────────────
 function authHeaders(extra) {
-  var h = { 'Authorization': apiKey, 'X-Client-Code': clientCode };
+  var h = { 'X-Client-Code': clientCode };
   if (extra) Object.assign(h, extra);
   return h;
 }
 
+function stripHtml(s) {
+  return (s||"").replace(/<[^>]*>/g,"").replace(/&nbsp;/g," ").trim();
+}
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
@@ -1533,29 +1560,55 @@ function downloadCSV() {
 }
 
 // ── HISTORIAL ────────────────────────────────────────────────────
+// ── HISTORIAL STATE ──────────────────────────────────────────────
+var histFiltered = [];
+var histSort     = { key: 'fecha', dir: -1 };
+var histPage     = 0;
+const HIST_PG    = 15;
+
+const ESTADO_MAP = {
+  draft:  { label:'Borrador',   color:'#999',    bg:'#f5f5f7' },
+  sent:   { label:'Enviado',    color:'#1a73e8', bg:'#e8f0fe' },
+  sale:   { label:'Confirmado', color:'#27ae60', bg:'#e8f8f0' },
+  done:   { label:'Facturado',  color:'#2a9d8f', bg:'#e0f5f3' },
+  cancel: { label:'Cancelado',  color:'#e74c3c', bg:'#fde8e8' },
+};
+
+function estadoBadge(state) {
+  var e = ESTADO_MAP[state] || { label: state||'—', color:'#999', bg:'#f5f5f7' };
+  return '<span class="sbadge" style="background:'+e.bg+';color:'+e.color+'">'+e.label+'</span>';
+}
+
+function stripHtml(s) {
+  return (s||'').replace(/<[^>]*>/g,'').replace(/&nbsp;/g,' ').replace(/Tempo Novo[\s\S]{0,200}temponovo\.cl[^\s<]*/gi,'').trim();
+}
+
 async function loadHistorial() {
   var tbody   = document.getElementById('hist-body');
   var loading = document.getElementById('hist-loading');
   loading.style.display = 'flex';
   tbody.innerHTML = '';
 
+  // Default: last 7 days
+  var fromEl = document.getElementById('hist-from');
+  var toEl   = document.getElementById('hist-to');
+  if (!fromEl.value) {
+    var d7 = new Date(); d7.setDate(d7.getDate()-7);
+    fromEl.value = d7.toISOString().split('T')[0];
+  }
+  if (!toEl.value) {
+    toEl.value = new Date().toISOString().split('T')[0];
+  }
+
   try {
-    var res = await fetch(BACKEND + '/api/historial', {
-      headers: authHeaders()
-    });
+    var url = BACKEND + '/api/historial?from=' + fromEl.value + '&to=' + toEl.value;
+    var res = await fetch(url, { headers: authHeaders() });
     if (!res.ok) throw new Error('Error ' + res.status);
     var data = await res.json();
 
-    // Merge con pedidos locales de la sesion (pueden ser mas recientes)
-    var remoteIds = new Set(data.map(function(h) { return h.id; }));
-    var localNew  = orderHistory.filter(function(h) { return !remoteIds.has(h.id); });
-    var combined  = localNew.concat(data);
-
-    orderHistory = combined;
-    var badge = document.getElementById('hist-badge');
-    badge.textContent = combined.length;
-    badge.classList.add('show');
-
+    var remoteIds = new Set(data.map(function(x) { return x.id; }));
+    var localNew  = orderHistory.filter(function(x) { return !remoteIds.has(x.id); });
+    orderHistory  = localNew.concat(data);
     renderHistLocal();
   } catch(e) {
     console.warn('Historial remoto no disponible:', e.message);
@@ -1564,57 +1617,155 @@ async function loadHistorial() {
   loading.style.display = 'none';
 }
 
-function renderHistLocal() {
+function filterHist() {
+  var q      = (document.getElementById('hist-search').value||'').toUpperCase();
+  var from   = document.getElementById('hist-from').value;
+  var to     = document.getElementById('hist-to').value;
+  var estado = document.getElementById('hist-estado').value;
+
+  histFiltered = orderHistory.filter(function(o) {
+    if (q      && !(o.nombre||'').toUpperCase().includes(q)) return false;
+    if (from   && (o.fecha||'') < from) return false;
+    if (to     && (o.fecha||'') > to)   return false;
+    if (estado && (o.estado||'') !== estado) return false;
+    return true;
+  });
+  histPage = 0;
+  renderHistPage();
+}
+
+function sortHist(key) {
+  if (histSort.key === key) histSort.dir *= -1;
+  else { histSort.key = key; histSort.dir = -1; }
+  ['nombre','fecha','total'].forEach(function(k) {
+    var el = document.getElementById('sh-' + k);
+    if (el) el.textContent = k === histSort.key ? (histSort.dir===1 ? ' ↑' : ' ↓') : '';
+  });
+  histFiltered.sort(function(a,b) {
+    var av = a[histSort.key]||'', bv = b[histSort.key]||'';
+    return av < bv ? -histSort.dir : av > bv ? histSort.dir : 0;
+  });
+  histPage = 0;
+  renderHistPage();
+}
+
+function clearHistFilters() {
+  document.getElementById('hist-search').value  = '';
+  document.getElementById('hist-from').value    = '';
+  document.getElementById('hist-to').value      = '';
+  document.getElementById('hist-estado').value  = '';
+  loadHistorial();
+}
+
+function renderHistPage() {
   var tbody = document.getElementById('hist-body');
-  if (!orderHistory.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="empty-row">No hay pedidos en esta sesión</td></tr>';
+  var count = document.getElementById('hist-count');
+  if (!histFiltered.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-row">No hay pedidos en este período</td></tr>';
+    if (count) count.textContent = '';
+    document.getElementById('hist-pagination').innerHTML = '';
     return;
   }
-  tbody.innerHTML = orderHistory.map(function(h) {
-    var uniqueCods = new Set(h.productos.map(function(p) { return p.Sku; })).size;
+  var total = histFiltered.reduce(function(s,o) { return s+(o.total||0); }, 0);
+  if (count) count.textContent = histFiltered.length + ' pedidos · ' + fmt(total);
+
+  var start = histPage * HIST_PG;
+  var page  = histFiltered.slice(start, start + HIST_PG);
+
+  tbody.innerHTML = page.map(function(o) {
+    var lineas = (o.productos||[]).length;
+    // Botones de factura si existen
+    var facBtns = '';
+    if (o.facturas && o.facturas.length) {
+      facBtns = o.facturas.map(function(f) {
+        var pdf  = 'https://temponovo.odoo.com/report/pdf/reports_temponovo.report_invoice_temponovo/' + f.id;
+        var xlsx = 'https://temponovo.odoo.com/report/xlsx/reports_temponovo.invoice_xlsx/' + f.id;
+        return '<a href="'+pdf+'" target="_blank" class="btn btn-outline btn-sm" style="margin-right:2px" title="PDF '+esc(f.name)+'">📄</a>' +
+               '<a href="'+xlsx+'" target="_blank" class="btn btn-outline btn-sm" style="margin-right:4px" title="XLS '+esc(f.name)+'">📊</a>';
+      }).join('');
+    }
     return '<tr>' +
-      '<td class="mono" style="font-size:12px">' + esc(h.nombre) + '</td>' +
-      '<td style="font-size:12px">' + esc(h.fecha) + '</td>' +
-      '<td style="font-size:12px">' + esc(h.tipo) + '</td>' +
-      '<td style="font-size:12px;color:var(--text-muted)">' + esc(h.obs||'—') + '</td>' +
-      '<td style="font-weight:700;color:var(--teal)">' + uniqueCods + '</td>' +
-      '<td><button class="btn btn-outline btn-sm" onclick="viewOrder(' + h.id + ')">Ver</button></td>' +
+      '<td class="mono" style="font-size:12px;color:var(--teal-dark)">' + esc(o.nombre) + '</td>' +
+      '<td style="font-size:12px">' + esc(o.fecha) + '</td>' +
+      '<td>' + estadoBadge(o.estado) + '</td>' +
+      '<td style="text-align:right;font-size:12px;font-weight:600">' + (o.total ? fmt(o.total) : '—') + '</td>' +
+      '<td style="text-align:center;font-weight:700;color:var(--teal)">' + lineas + '</td>' +
+      '<td style="white-space:nowrap">' +
+        facBtns +
+        '<button class="btn btn-outline btn-sm" onclick="viewOrder('+JSON.stringify(o.id)+')">Ver</button>' +
+      '</td>' +
     '</tr>';
   }).join('');
+
+  var pages = Math.ceil(histFiltered.length / HIST_PG);
+  var pg = document.getElementById('hist-pagination');
+  if (pages <= 1) { pg.innerHTML = ''; return; }
+  pg.innerHTML =
+    '<button class="btn btn-outline btn-sm" onclick="histPageGo('+(histPage-1)+')" '+(histPage===0?'disabled':'')+'>← Ant</button>' +
+    '<span style="font-size:12px;color:var(--text-muted)">Pág '+(histPage+1)+' / '+pages+'</span>' +
+    '<button class="btn btn-outline btn-sm" onclick="histPageGo('+(histPage+1)+')" '+(histPage>=pages-1?'disabled':'')+'>Sig →</button>';
+}
+
+function histPageGo(p) {
+  var pages = Math.ceil(histFiltered.length / HIST_PG);
+  histPage = Math.max(0, Math.min(p, pages-1));
+  renderHistPage();
+}
+
+function renderHistLocal() {
+  histFiltered = orderHistory.slice();
+  histFiltered.sort(function(a,b) { return (a.fecha||'') < (b.fecha||'') ? 1 : -1; });
+  renderHistPage();
+  var badge = document.getElementById('hist-badge');
+  if (badge) { badge.textContent = orderHistory.length; badge.classList.add('show'); }
 }
 
 function viewOrder(id) {
-  var o = orderHistory.find(function(h) { return h.id === id; });
+  var o = orderHistory.find(function(x) { return x.id == id; });
   if (!o) return;
   currentDetail = o;
+  var obs = stripHtml(o.obs||'');
   document.getElementById('dt-title').textContent = 'Venta ' + o.nombre;
   document.getElementById('dt-body').innerHTML =
     '<div class="detail-meta">' +
-      '<div><span>Fecha</span>' + o.fecha + '</div>' +
-      '<div><span>Tipo</span>' + o.tipo + '</div>' +
-      '<div><span>Observación</span>' + (o.obs||'—') + '</div>' +
-      '<div><span>Códigos únicos</span><strong style="color:var(--teal)">' +
-        new Set(o.productos.map(function(p){return p.Sku;})).size + '</strong></div>' +
+      '<div><span>Fecha</span>' + esc(o.fecha) + '</div>' +
+      '<div><span>Estado</span>' + esc(o.estado||'—') + '</div>' +
+      '<div><span>Total</span><strong style="color:var(--teal)">' + (o.total ? fmt(o.total) : '—') + '</strong></div>' +
+      '<div><span>Líneas</span><strong style="color:var(--teal)">' + (o.productos||[]).length + '</strong></div>' +
     '</div>' +
-    '<table class="dtable"><thead><tr><th>SKU</th><th>Producto</th><th>Qty</th><th>Precio</th></tr></thead><tbody>' +
-    o.productos.map(function(p) {
-      return '<tr><td class="mono" style="font-size:11px;color:var(--teal-dark)">' + esc(p.Sku) + '</td>' +
-        '<td>' + esc(p.Producto) + '</td>' +
+    (obs ? '<div style="background:#f8f9fb;border-radius:7px;padding:10px 12px;font-size:12px;color:var(--text-muted);margin-bottom:14px">' + esc(obs) + '</div>' : '') +
+    '<table class="dtable"><thead><tr><th>SKU</th><th>Producto</th><th style="text-align:center">Qty</th><th style="text-align:right">Precio</th><th style="text-align:right">Subtotal</th></tr></thead><tbody>' +
+    (o.productos||[]).map(function(p) {
+      return '<tr>' +
+        '<td class="mono" style="font-size:11px;color:var(--teal-dark)">' + esc(p.Sku) + '</td>' +
+        '<td style="font-size:12px">' + esc(p.Producto) + '</td>' +
         '<td style="text-align:center">' + p.Cantidad + '</td>' +
-        '<td style="text-align:right">' + fmt(p.Precio) + '</td></tr>';
+        '<td style="text-align:right">' + fmt(p.Precio) + '</td>' +
+        '<td style="text-align:right;font-weight:600">' + fmt(p.Precio * p.Cantidad) + '</td>' +
+      '</tr>';
     }).join('') +
     '</tbody></table>';
   document.getElementById('modal-detail').classList.add('open');
 }
 
+
 function dlHistCSV() {
   if (!currentDetail) return;
   var o = currentDetail;
-  var rows = [['SKU','Código Barra','Producto','Cantidad','Precio Unitario','Subtotal']];
-  o.productos.forEach(function(p) {
-    rows.push([p.Sku, p.CodBarra||'', p.Producto, p.Cantidad, p.Precio, p.Precio * p.Cantidad]);
+  var rows = [['SKU','Producto','Cantidad','Precio Unitario','Subtotal']];
+  (o.productos||[]).forEach(function(p) {
+    rows.push([p.Sku, p.Producto, p.Cantidad, p.Precio, p.Precio * p.Cantidad]);
   });
+  var total = (o.productos||[]).reduce(function(s,p) { return s + p.Precio*p.Cantidad; }, 0);
+  rows.push(['','TOTAL','','' ,total]);
   dlCSV(rows, o.nombre + '_Temponovo.csv');
+}
+
+function dlHistPDF() {
+  if (!currentDetail || !currentDetail.id) return;
+  // Odoo report URL para sale.order
+  var url = 'https://temponovo.odoo.com/report/pdf/sale.report_saleorder/' + currentDetail.id;
+  window.open(url, '_blank');
 }
 
 // ── STOCK TAB ────────────────────────────────────────────────────
@@ -1717,87 +1868,124 @@ function dlStockCSV() {
 }
 
 // ── DEUDA ────────────────────────────────────────────────────────
+var deudaAll      = [];
+var deudaFiltered = [];
+
 async function loadDeuda() {
-  document.getElementById('deuda-loading').style.display = 'flex';
-  document.getElementById('deuda-result').style.display = 'none';
-  document.getElementById('deuda-empty').style.display = 'none';
-  document.getElementById('deuda-kpis').style.display = 'none';
+  var loading = document.getElementById('deuda-loading');
+  var result  = document.getElementById('deuda-result');
+  var empty   = document.getElementById('deuda-empty');
+  var kpis    = document.getElementById('deuda-kpis');
+  loading.style.display = 'flex';
+  result.style.display  = 'none';
+  empty.style.display   = 'none';
+  kpis.style.display    = 'none';
 
   try {
-    var res = await fetch(BACKEND + '/api/deuda', {
-      headers: authHeaders()
-    });
-    if (!res.ok) throw new Error('Error al consultar deuda');
+    var res = await fetch(BACKEND + '/api/deuda', { headers: authHeaders() });
+    if (!res.ok) throw new Error('Error ' + res.status);
     var data = await res.json();
-    deudaData = data;
-    renderDeudaKPIs();
+    var facturas = data.facturas || [];
+    var resumen  = data.resumen  || {};
+
+    if (!facturas.length) {
+      empty.style.display = 'flex';
+      loading.style.display = 'none';
+      return;
+    }
+
+    deudaAll = facturas;
+
+    // KPIs
+    kpis.style.display = 'block';
+    var vencido = (resumen.d_1_30||0)+(resumen.d_31_60||0)+(resumen.d_61_90||0)+(resumen.d_91_120||0)+(resumen.antiguos||0);
+    var critico = (resumen.d_61_90||0)+(resumen.d_91_120||0)+(resumen.antiguos||0);
+
+    document.getElementById('deuda-cards').innerHTML = [
+      { label:'Total deuda',    value: fmt(resumen.total||0), color:'var(--teal)' },
+      { label:'N° documentos',  value: facturas.length,        color:'var(--text)' }
+    ].map(function(c) {
+      return '<div class="kpi-card"><div class="kpi-label">'+c.label+'</div>' +
+             '<div class="kpi-value" style="color:'+c.color+'">'+c.value+'</div></div>';
+    }).join('');
+
+
+
     filterDeuda();
+    result.style.display = 'block';
   } catch(e) {
-    document.getElementById('deuda-loading').innerHTML =
-      '<div style="color:var(--text-muted);font-size:13px;padding:20px">⚠ ' + e.message +
-      ' — El servidor de deuda estará disponible próximamente.</div>';
+    console.warn('Deuda error:', e.message);
+    empty.textContent = '⚠ ' + e.message;
+    empty.style.display = 'flex';
   }
-  document.getElementById('deuda-loading').style.display = 'none';
-}
-
-function renderDeudaKPIs() {
-  var total   = deudaData.reduce(function(s,r) { return s+r.monto; }, 0);
-  var alDia   = deudaData.filter(function(r) { return r.tramo==='al_dia'; }).reduce(function(s,r) { return s+r.monto; }, 0);
-  var vencido = deudaData.filter(function(r) { return r.tramo==='vencido'; }).reduce(function(s,r) { return s+r.monto; }, 0);
-
-  document.getElementById('deuda-cards').innerHTML = [
-    { label:'Total deuda',  value: fmt(total),   color:'var(--teal)',  bg:'var(--teal-light)' },
-    { label:'Al día',       value: fmt(alDia),   color:'var(--green)', bg:'var(--green-light)' },
-    { label:'Vencido',      value: fmt(vencido), color:'var(--red)',   bg:'var(--red-light)' },
-    { label:'N° facturas',  value: deudaData.length, color:'var(--text)', bg:'#f5f5f7' }
-  ].map(function(c) {
-    return '<div class="kpi-card" style="background:' + c.bg + '">' +
-      '<div class="kpi-label">' + c.label + '</div>' +
-      '<div class="kpi-value" style="color:' + c.color + '">' + c.value + '</div>' +
-    '</div>';
-  }).join('');
-  document.getElementById('deuda-kpis').style.display = '';
+  loading.style.display = 'none';
 }
 
 function filterDeuda() {
   var q     = (document.getElementById('deuda-search').value||'').toUpperCase();
-  var tramo = document.getElementById('deuda-tramo').value;
-  deudaFiltered = deudaData.filter(function(r) {
-    if (tramo && r.tramo !== tramo) return false;
-    if (q && !r.num.toUpperCase().includes(q)) return false;
+  var tramo = document.getElementById('deuda-tramo-sel').value;
+  var tipo  = document.getElementById('deuda-tipo-sel').value;
+
+  deudaFiltered = deudaAll.filter(function(f) {
+    if (q     && !(f.doc||'').toUpperCase().includes(q)) return false;
+    if (tramo && f.tramo !== tramo) return false;
+    if (tipo) {
+      var isAper = (f.move_name||'').startsWith('APER/');
+      if (tipo === 'APER' && !isAper) return false;
+      if (tipo === 'FAC'  &&  isAper) return false;
+    }
     return true;
   });
+
+  var total = deudaFiltered.reduce(function(s,f) { return s+f.saldo; }, 0);
+  document.getElementById('deuda-total-val').textContent = fmt(total);
+  document.getElementById('deuda-count').textContent     = deudaFiltered.length + ' documentos';
+
+  var tramoColors = { al_dia:'#27ae60', d_1_30:'#f39c12', d_31_60:'#e67e22', d_61_90:'#e74c3c', d_91_120:'#c0392b', antiguos:'#7f0000' };
+  var tramoLabels = { al_dia:'Al día', d_1_30:'1-30 días', d_31_60:'31-60 días', d_61_90:'61-90 días', d_91_120:'91-120 días', antiguos:'+120 días' };
+
   var tbody = document.getElementById('deuda-body');
   if (!deudaFiltered.length) {
-    tbody.innerHTML = '<tr><td colspan="5" class="empty-row">Sin resultados</td></tr>';
-    document.getElementById('deuda-result').style.display = '';
-    document.getElementById('deuda-count').textContent = '0 facturas';
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-row">Sin resultados</td></tr>';
     return;
   }
-  tbody.innerHTML = deudaFiltered.map(function(r) {
-    var badge = r.tramo === 'al_dia'
-      ? '<span class="sbadge s-conf">Al día</span>'
-      : '<span class="sbadge s-venc">Vencido</span>';
+  tbody.innerHTML = deudaFiltered.map(function(f) {
+    var color = tramoColors[f.tramo] || '#999';
+    var label = tramoLabels[f.tramo] || f.tramo;
+    var badge = '<span class="sbadge" style="background:'+color+'22;color:'+color+'">'+label+'</span>';
+    var isAper = (f.move_name||'').startsWith('APER/');
+    var tipoBadge = isAper
+      ? '<span class="sbadge" style="background:#e8f0fe;color:#1a73e8">Apertura</span>'
+      : '<span class="sbadge s-conf">Factura</span>';
+    var pdfUrl  = 'https://temponovo.odoo.com/report/pdf/reports_temponovo.report_invoice_temponovo/' + f.move_id;
+    var xlsxUrl = 'https://temponovo.odoo.com/report/xlsx/reports_temponovo.invoice_xlsx/' + f.move_id;
     return '<tr>' +
-      '<td class="mono" style="font-size:12px">' + esc(r.num) + '</td>' +
-      '<td style="font-size:12px">' + esc(r.fecha) + '</td>' +
-      '<td style="font-size:12px">' + esc(r.vencimiento||'—') + '</td>' +
-      '<td>' + badge + '</td>' +
-      '<td style="text-align:right;font-weight:600">' + fmt(r.monto) + '</td>' +
+      '<td class="mono" style="font-size:11px;color:var(--teal-dark)">' + esc(f.doc) + '</td>' +
+      '<td class="mono" style="font-size:11px;color:var(--text-muted)">' + esc(f.ref||'—') + '</td>' +
+      '<td>'+tipoBadge+'</td>' +
+      '<td style="font-size:12px">'+esc(f.fecha)+'</td>' +
+      '<td style="font-size:12px">'+esc(f.vencimiento||'—')+'</td>' +
+
+      '<td style="text-align:right;font-weight:600">'+fmt(f.saldo)+'</td>' +
+      '<td style="white-space:nowrap">' +
+        '<a href="'+pdfUrl+'" target="_blank" class="btn btn-outline btn-sm" style="margin-right:4px" title="PDF">📄 PDF</a>' +
+        '<a href="'+xlsxUrl+'" target="_blank" class="btn btn-outline btn-sm" title="Excel">📊 XLS</a>' +
+      '</td>' +
     '</tr>';
   }).join('');
-  document.getElementById('deuda-result').style.display = '';
-  document.getElementById('deuda-count').textContent = deudaFiltered.length + ' facturas';
 }
 
 function dlDeudaCSV() {
-  if (!deudaFiltered.length) return;
-  var rows = [['Factura','Fecha','Vencimiento','Tramo','Monto']];
-  deudaFiltered.forEach(function(r) {
-    rows.push([r.num, r.fecha, r.vencimiento||'', r.tramo==='al_dia'?'Al día':'Vencido', r.monto]);
+  if (!deudaAll.length) return;
+  var tramoLabels = { al_dia:'Al día', d_1_30:'1-30 días', d_31_60:'31-60 días', d_61_90:'61-90 días', d_91_120:'91-120 días', antiguos:'+120 días' };
+  var rows = [['Factura','Tipo','Fecha','Vencimiento','Tramo','Saldo']];
+  (deudaFiltered.length ? deudaFiltered : deudaAll).forEach(function(f) {
+    var tipo = (f.move_name||'').startsWith('APER/') ? 'Apertura' : 'Factura';
+    rows.push([f.doc, tipo, f.fecha, f.vencimiento||'', tramoLabels[f.tramo]||f.tramo, f.saldo]);
   });
-  dlCSV(rows, 'deuda_temponovo.csv');
+  dlCSV(rows, 'deuda_temponovo_'+new Date().toISOString().split('T')[0]+'.csv');
 }
+
 
 // ── CONVERTIR FACTURA ────────────────────────────────────────────
 function processFacText(raw) {
