@@ -1025,7 +1025,6 @@ table.grid tr:last-child td { border-bottom:none; }
     <div id="dt-body"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap">
       <button class="btn btn-outline btn-sm" onclick="dlHistCSV()">↓ CSV</button>
-      <button class="btn btn-outline btn-sm" onclick="dlHistPDF()">↓ PDF Odoo</button>
       <button class="btn btn-outline btn-sm" onclick="closeModal('modal-detail')">Cerrar</button>
     </div>
   </div>
@@ -1770,7 +1769,7 @@ function viewOrder(id) {
   document.getElementById('dt-body').innerHTML =
     '<div class="detail-meta">' +
       '<div><span>Fecha</span>' + esc(o.fecha) + '</div>' +
-      '<div><span>Estado</span>' + esc(o.estado||'—') + '</div>' +
+      '<div><span>Estado</span>' + estadoBadge(o.facturas && o.facturas.length ? 'done' : o.estado) + '</div>' +
       '<div><span>Total</span><strong style="color:var(--teal)">' + (o.total ? fmt(o.total) : '—') + '</strong></div>' +
       '<div><span>Líneas</span><strong style="color:var(--teal)">' + (o.productos||[]).length + '</strong></div>' +
     '</div>' +
