@@ -18,7 +18,8 @@ const CLIENTES = {
   'LARELOJERIA': {
     apiKey:    process.env.APIKEY_LARELOJERIA || '22f7ebb65ec6646888a4c22028a854e39e310b31c5461cc52d22e835d92d5bd6',
     partnerId: 51666,
-    name:      'La Relojería SPA'
+    name:      'La Relojería SPA',
+    sucursales: ['MUT', 'Vespucio', 'Pastene']
   }
   // 'OTOCLIENTE': {
   //   apiKey:    process.env.APIKEY_OTOCLIENTE || '',
@@ -361,7 +362,8 @@ app.get('/api/me', (req, res) => {
   if (!cliente) return res.status(401).json({ error: 'Código no reconocido' });
   req.clientName = cliente.name;
   req.partnerId  = cliente.partnerId;
-  res.json({ name: req.clientName, partnerId: req.partnerId });
+  const cliente = CLIENTES[req.clientCode] || {};
+  res.json({ name: req.clientName, partnerId: req.partnerId, sucursales: cliente.sucursales || [] });
 });
 
 // ── Health check ──────────────────────────────────────────────────

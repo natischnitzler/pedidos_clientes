@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Temponovo · Portal Cliente</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⌚</text></svg>"/>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⌚</text></svg>"/>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
@@ -738,9 +739,7 @@ table.grid tr:last-child td { border-bottom:none; }
           <div class="field-group">
             <label class="field-lbl">Tipo de venta</label>
             <select class="field-select" id="tipo-venta">
-              <option value="Venta Directa">Venta Directa</option>
-              <option value="Consignación">Consignación</option>
-              <option value="Canje">Canje</option>
+              <option value="">Seleccionar sucursal...</option>
             </select>
           </div>
 
@@ -910,53 +909,97 @@ table.grid tr:last-child td { border-bottom:none; }
         <div class="page-title" style="margin-bottom:0">Cuenta por Cobrar</div>
         <button class="btn btn-outline btn-sm" onclick="loadDeuda()">↻ Actualizar</button>
       </div>
+
+      <!-- Tabs -->
+      <div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:16px">
+        <button id="dtab-facturas" onclick="showDeudaTab('facturas')"
+          style="padding:8px 20px;font-size:13px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--teal);border-bottom:2px solid var(--teal);margin-bottom:-2px">
+          Facturas
+        </button>
+        <button id="dtab-pagos" onclick="showDeudaTab('pagos')"
+          style="padding:8px 20px;font-size:13px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--text-muted);border-bottom:2px solid transparent;margin-bottom:-2px">
+          Pagos
+        </button>
+      </div>
+
       <div id="deuda-loading" class="loading" style="display:none">
         <div class="spinner"></div> Consultando Odoo...
       </div>
-      <div id="deuda-kpis" style="display:none">
-        <div class="kpi-grid" id="deuda-cards"></div>
 
-      </div>
-      <div id="deuda-result" style="display:none">
-        <div class="filters-row">
-          <input id="deuda-search" class="filter-input" type="text"
-            placeholder="Buscar factura..."
-            oninput="filterDeuda()" style="max-width:220px"/>
-          <select id="deuda-tramo-sel" class="filter-select" onchange="filterDeuda()">
-            <option value="">Todos los tramos</option>
-            <option value="al_dia">Al día</option>
-            <option value="1-30">1-30 días</option>
-            <option value="31-60">31-60 días</option>
-            <option value="61-90">61-90 días</option>
-            <option value="91-120">91-120 días</option>
-            <option value="antiguos">Antiguos</option>
-          </select>
-          <select id="deuda-tipo-sel" class="filter-select" onchange="filterDeuda()">
-            <option value="">Todos los tipos</option>
-            <option value="FAC">Facturas</option>
-            <option value="APER">Apertura</option>
-          </select>
-          <span id="deuda-count" style="font-size:12px;color:var(--text-light)"></span>
-          <button class="btn btn-outline btn-sm" onclick="dlDeudaCSV()">↓ CSV</button>
+      <!-- ── TAB FACTURAS ── -->
+      <div id="dpanel-facturas">
+
+        <!-- KPIs resumen -->
+        <div id="deuda-kpis" style="display:none;margin-bottom:16px">
+          <!-- Total general -->
+          <div id="deuda-kpi-total" style="margin-bottom:12px"></div>
+          <!-- Por año -->
+          <div id="deuda-kpi-years" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px"></div>
+          <!-- Por mes -->
+          <div id="deuda-kpi-months" style="display:flex;flex-wrap:wrap;gap:8px"></div>
         </div>
-        <div style="overflow-x:auto">
-          <table class="htable">
-            <thead><tr>
-              <th>Factura</th><th>Ref. Pedido</th><th>Tipo</th><th>Fecha</th>
-              <th>Vencimiento</th><th style="text-align:right">Monto</th><th></th>
-            </tr></thead>
-            <tbody id="deuda-body"></tbody>
-          </table>
+
+        <!-- Filtro y tabla -->
+        <div id="deuda-result" style="display:none">
+          <div class="filters-row" style="margin-bottom:12px">
+            <input id="deuda-search" class="filter-input" type="text"
+              placeholder="Buscar factura..." oninput="filterDeuda()" style="max-width:240px"/>
+            <span id="deuda-count" style="font-size:12px;color:var(--text-light)"></span>
+            <button class="btn btn-outline btn-sm" onclick="dlDeudaCSV()">↓ CSV</button>
+          </div>
+          <div style="overflow-x:auto">
+            <table class="htable" style="table-layout:fixed;width:100%">
+              <thead><tr>
+                <th style="width:120px">Factura</th>
+                <th style="width:80px">Tipo</th>
+                <th style="width:100px;cursor:pointer" onclick="sortDeuda('fecha')">Fecha <span id="sd-fecha"></span></th>
+                <th style="width:110px;cursor:pointer" onclick="sortDeuda('vencimiento')">Vencimiento <span id="sd-venc"></span></th>
+                <th style="width:90px;cursor:pointer" onclick="sortDeuda('tramo')">Tramo <span id="sd-tramo"></span></th>
+                <th style="width:120px;text-align:right;cursor:pointer" onclick="sortDeuda('saldo')">Monto <span id="sd-saldo"></span></th>
+                <th style="width:110px"></th>
+              </tr></thead>
+              <tbody id="deuda-body"></tbody>
+            </table>
+          </div>
+          <div style="background:var(--white);border-radius:var(--radius);padding:12px 16px;margin-top:8px;box-shadow:var(--shadow);display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:12px;font-weight:500;color:var(--text-muted)">Total filtrado</span>
+            <span id="deuda-total-val" style="font-size:16px;font-weight:700;color:var(--teal)"></span>
+          </div>
         </div>
-        <div id="deuda-total-row" style="background:var(--white);border-radius:var(--radius);padding:12px 16px;margin-top:8px;box-shadow:var(--shadow);display:flex;justify-content:space-between;align-items:center">
-          <span style="font-size:12px;font-weight:500;color:var(--text-muted)">Total filtrado</span>
-          <span id="deuda-total-val" style="font-size:16px;font-weight:700;color:var(--teal)"></span>
+
+        <div id="deuda-empty" style="display:none;text-align:center;padding:40px;color:var(--text-light);font-size:14px">
+          🎉 Sin deuda pendiente
         </div>
       </div>
-      <div id="deuda-empty" style="display:none;text-align:center;padding:40px;color:var(--text-light);font-size:14px">
-        🎉 Sin deuda pendiente
+
+      <!-- ── TAB PAGOS ── -->
+      <div id="dpanel-pagos" style="display:none">
+        <div id="pagos-loading" class="loading" style="display:none">
+          <div class="spinner"></div> Cargando pagos...
+        </div>
+        <div id="pagos-result" style="display:none">
+          <div style="overflow-x:auto">
+            <table class="htable" style="table-layout:fixed;width:100%">
+              <thead><tr>
+                <th style="width:140px">Referencia</th>
+                <th style="width:110px">Fecha</th>
+                <th style="width:110px">Monto</th>
+                <th style="width:130px">Estado</th>
+                <th style="width:160px">Factura aplicada</th>
+              </tr></thead>
+              <tbody id="pagos-body"></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="pagos-empty" style="display:none;text-align:center;padding:40px;color:var(--text-light);font-size:14px">
+          Sin pagos registrados
+        </div>
       </div>
+
     </div>
+
+
+</div>
 
   </div><!-- /main -->
 </div><!-- /app -->
@@ -1044,6 +1087,13 @@ async function doLogin() {
     clientName = me.name || code;
     clientCode = code;
     document.getElementById('header-client').textContent = clientName;
+
+    // Poblar sucursales en selector de tipo de venta
+    var tipoSel = document.getElementById('tipo-venta');
+    var sucursales = me.sucursales || ['Venta Directa'];
+    tipoSel.innerHTML = sucursales.map(function(s) {
+      return '<option value="'+s+'">'+s+'</option>';
+    }).join('');
 
     // 2. Cargar stock
     var res = await fetch(BACKEND + '/api/stock', {
@@ -1674,20 +1724,11 @@ function renderHistPage() {
 
   tbody.innerHTML = page.map(function(o) {
     var lineas = (o.productos||[]).length;
-    // Botones de factura si existen
     var facBtns = '';
-    if (o.facturas && o.facturas.length) {
-      facBtns = o.facturas.map(function(f) {
-        var pdf  = 'https://temponovo.odoo.com/report/pdf/reports_temponovo.report_invoice_temponovo/' + f.id;
-        var xlsx = 'https://temponovo.odoo.com/report/xlsx/reports_temponovo.invoice_xlsx/' + f.id;
-        return '<a href="'+pdf+'" target="_blank" class="btn btn-outline btn-sm" style="margin-right:2px" title="PDF '+esc(f.name)+'">📄</a>' +
-               '<a href="'+xlsx+'" target="_blank" class="btn btn-outline btn-sm" style="margin-right:4px" title="XLS '+esc(f.name)+'">📊</a>';
-      }).join('');
-    }
     return '<tr>' +
       '<td class="mono" style="font-size:12px;color:var(--teal-dark)">' + esc(o.nombre) + '</td>' +
       '<td style="font-size:12px">' + esc(o.fecha) + '</td>' +
-      '<td>' + estadoBadge(o.estado) + '</td>' +
+      '<td>' + estadoBadge(o.facturas && o.facturas.length ? 'done' : o.estado) + '</td>' +
       '<td style="text-align:right;font-size:12px;font-weight:600">' + (o.total ? fmt(o.total) : '—') + '</td>' +
       '<td style="text-align:center;font-weight:700;color:var(--teal)">' + lineas + '</td>' +
       '<td style="white-space:nowrap">' +
@@ -1870,89 +1911,187 @@ function dlStockCSV() {
 // ── DEUDA ────────────────────────────────────────────────────────
 var deudaAll      = [];
 var deudaFiltered = [];
+var deudaSort     = { key: 'fecha', dir: -1 };
+var pagosAll      = [];
+
+var MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+function showDeudaTab(tab) {
+  ['facturas','pagos'].forEach(function(t) {
+    var btn   = document.getElementById('dtab-' + t);
+    var panel = document.getElementById('dpanel-' + t);
+    var active = t === tab;
+    btn.style.color       = active ? 'var(--teal)' : 'var(--text-muted)';
+    btn.style.borderBottom = active ? '2px solid var(--teal)' : '2px solid transparent';
+    panel.style.display   = active ? '' : 'none';
+  });
+  if (tab === 'pagos' && !pagosAll.length) loadPagos();
+}
 
 async function loadDeuda() {
-  var loading = document.getElementById('deuda-loading');
-  var result  = document.getElementById('deuda-result');
-  var empty   = document.getElementById('deuda-empty');
-  var kpis    = document.getElementById('deuda-kpis');
-  loading.style.display = 'flex';
-  result.style.display  = 'none';
-  empty.style.display   = 'none';
-  kpis.style.display    = 'none';
+  document.getElementById('deuda-loading').style.display = 'flex';
+  document.getElementById('deuda-result').style.display  = 'none';
+  document.getElementById('deuda-empty').style.display   = 'none';
+  document.getElementById('deuda-kpis').style.display    = 'none';
 
   try {
-    var res = await fetch(BACKEND + '/api/deuda', { headers: authHeaders() });
+    var res  = await fetch(BACKEND + '/api/deuda', { headers: authHeaders() });
     if (!res.ok) throw new Error('Error ' + res.status);
     var data = await res.json();
     var facturas = data.facturas || [];
     var resumen  = data.resumen  || {};
 
     if (!facturas.length) {
-      empty.style.display = 'flex';
-      loading.style.display = 'none';
+      document.getElementById('deuda-empty').style.display = 'flex';
+      document.getElementById('deuda-loading').style.display = 'none';
       return;
     }
 
     deudaAll = facturas;
 
-    // KPIs
-    kpis.style.display = 'block';
-    var vencido = (resumen.d_1_30||0)+(resumen.d_31_60||0)+(resumen.d_61_90||0)+(resumen.d_91_120||0)+(resumen.antiguos||0);
-    var critico = (resumen.d_61_90||0)+(resumen.d_91_120||0)+(resumen.antiguos||0);
+    // ── RESUMEN POR AÑO Y MES ──
+    var byYear  = {};
+    var byMonth = {};
+    var total   = 0;
+    facturas.forEach(function(f) {
+      // Las aperturas (APER/) se agrupan siempre en Dic 2025
+      var isAper = (f.move_name||'').startsWith('APER/');
+      var fecha  = isAper ? '2025-12-01' : (f.fecha || '');
+      var yr     = fecha.slice(0,4);
+      var mo     = fecha.slice(5,7);
+      var saldo = f.saldo || 0;
+      total += saldo;
+      if (yr) { byYear[yr]  = (byYear[yr]  || 0) + saldo; }
+      if (yr && mo) {
+        var key = yr + '-' + mo;
+        byMonth[key] = (byMonth[key] || 0) + saldo;
+      }
+    });
 
-    document.getElementById('deuda-cards').innerHTML = [
-      { label:'Total deuda',    value: fmt(resumen.total||0), color:'var(--teal)' },
-      { label:'N° documentos',  value: facturas.length,        color:'var(--text)' }
-    ].map(function(c) {
-      return '<div class="kpi-card"><div class="kpi-label">'+c.label+'</div>' +
-             '<div class="kpi-value" style="color:'+c.color+'">'+c.value+'</div></div>';
+    // Render KPI total general
+    document.getElementById('deuda-kpi-total').innerHTML =
+      '<div class="kpi-card" style="background:var(--teal-light)">' +
+        '<div class="kpi-label">Total deuda</div>' +
+        '<div class="kpi-value" style="color:var(--teal)">' + fmt(total) + '</div>' +
+        '<div style="font-size:11px;color:var(--text-muted);margin-top:2px">' + facturas.length + ' documentos</div>' +
+      '</div>';
+
+    // Render por año
+    document.getElementById('deuda-kpi-years').innerHTML = Object.keys(byYear).sort().map(function(yr) {
+      return '<div class="kpi-card">' +
+        '<div class="kpi-label">Total ' + yr + '</div>' +
+        '<div class="kpi-value" style="color:var(--text);font-size:18px">' + fmt(byYear[yr]) + '</div>' +
+      '</div>';
     }).join('');
 
+    // Render por mes (solo los que tienen deuda, ordenados)
+    document.getElementById('deuda-kpi-months').innerHTML = Object.keys(byMonth).sort().reverse().map(function(key) {
+      var yr = key.slice(0,4), mo = key.slice(5,7);
+      var label = MESES[parseInt(mo,10)-1] + ' ' + yr;
+      return '<div style="background:var(--white);border-radius:var(--radius);padding:10px 14px;box-shadow:var(--shadow);min-width:120px">' +
+        '<div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase">' + label + '</div>' +
+        '<div style="font-size:15px;font-weight:700;color:var(--text);margin-top:2px">' + fmt(byMonth[key]) + '</div>' +
+      '</div>';
+    }).join('');
 
+    document.getElementById('deuda-kpis').style.display = 'block';
 
     filterDeuda();
-    result.style.display = 'block';
+    document.getElementById('deuda-result').style.display = 'block';
+
   } catch(e) {
     console.warn('Deuda error:', e.message);
-    empty.textContent = '⚠ ' + e.message;
-    empty.style.display = 'flex';
+    document.getElementById('deuda-empty').textContent = '⚠ ' + e.message;
+    document.getElementById('deuda-empty').style.display = 'flex';
   }
-  loading.style.display = 'none';
+  document.getElementById('deuda-loading').style.display = 'none';
+}
+
+async function loadPagos() {
+  document.getElementById('pagos-loading').style.display = 'flex';
+  try {
+    var res  = await fetch(BACKEND + '/api/pagos', { headers: authHeaders() });
+    if (!res.ok) throw new Error('Error ' + res.status);
+    pagosAll = await res.json();
+
+    if (!pagosAll.length) {
+      document.getElementById('pagos-empty').style.display = 'flex';
+    } else {
+      var tbody = document.getElementById('pagos-body');
+      var ESTADO = { posted:'Confirmado', draft:'Borrador', cancel:'Cancelado' };
+      var RECON  = { full:'Conciliado', partial:'Parcial', open:'Sin conciliar' };
+      var RCOLOR = { full:'#27ae60', partial:'#e67e22', open:'#e74c3c' };
+      tbody.innerHTML = pagosAll.map(function(p) {
+        var estLabel  = ESTADO[p.state] || p.state;
+        var reconKey  = p.reconcile_status || 'open';
+        var reconLbl  = RECON[reconKey]  || reconKey;
+        var reconColor = RCOLOR[reconKey] || '#999';
+        return '<tr>' +
+          '<td class="mono" style="font-size:12px;color:var(--teal-dark)">' + esc(p.name) + '</td>' +
+          '<td style="font-size:12px">' + esc(p.fecha) + '</td>' +
+          '<td style="font-size:13px;font-weight:600">' + fmt(p.monto) + '</td>' +
+          '<td><span class="sbadge" style="background:'+reconColor+'22;color:'+reconColor+'">' + reconLbl + '</span></td>' +
+          '<td style="font-size:11px;color:var(--text-muted)">' + esc(p.facturas_aplicadas||'—') + '</td>' +
+        '</tr>';
+      }).join('');
+      document.getElementById('pagos-result').style.display = 'block';
+    }
+  } catch(e) {
+    document.getElementById('pagos-empty').textContent = '⚠ ' + e.message;
+    document.getElementById('pagos-empty').style.display = 'flex';
+  }
+  document.getElementById('pagos-loading').style.display = 'none';
+}
+
+var deudaSort = { key: 'fecha', dir: -1 };
+
+function sortDeuda(key) {
+  if (deudaSort.key === key) deudaSort.dir *= -1;
+  else { deudaSort.key = key; deudaSort.dir = -1; }
+  ['fecha','venc','tramo','saldo'].forEach(function(k) {
+    var el = document.getElementById('sd-' + k);
+    var colKey = k === 'venc' ? 'vencimiento' : k;
+    if (el) el.textContent = colKey === deudaSort.key ? (deudaSort.dir===1 ? ' ↑' : ' ↓') : '';
+  });
+  deudaFiltered.sort(function(a,b) {
+    var av = a[deudaSort.key]||'', bv = b[deudaSort.key]||'';
+    if (deudaSort.key === 'saldo') { av = parseFloat(av)||0; bv = parseFloat(bv)||0; }
+    return av < bv ? -deudaSort.dir : av > bv ? deudaSort.dir : 0;
+  });
+  renderDeudaTable();
 }
 
 function filterDeuda() {
-  var q     = (document.getElementById('deuda-search').value||'').toUpperCase();
-  var tramo = document.getElementById('deuda-tramo-sel').value;
-  var tipo  = document.getElementById('deuda-tipo-sel').value;
-
+  var q = (document.getElementById('deuda-search').value||'').toUpperCase();
   deudaFiltered = deudaAll.filter(function(f) {
-    if (q     && !(f.doc||'').toUpperCase().includes(q)) return false;
-    if (tramo && f.tramo !== tramo) return false;
-    if (tipo) {
-      var isAper = (f.move_name||'').startsWith('APER/');
-      if (tipo === 'APER' && !isAper) return false;
-      if (tipo === 'FAC'  &&  isAper) return false;
-    }
+    if (q && !(f.doc||'').toUpperCase().includes(q) && !(f.ref||'').toUpperCase().includes(q)) return false;
     return true;
   });
+  deudaFiltered.sort(function(a,b) {
+    var av = a[deudaSort.key]||'', bv = b[deudaSort.key]||'';
+    if (deudaSort.key === 'saldo') { av=parseFloat(av)||0; bv=parseFloat(bv)||0; }
+    return av < bv ? -deudaSort.dir : av > bv ? deudaSort.dir : 0;
+  });
+  renderDeudaTable();
+}
 
-  var total = deudaFiltered.reduce(function(s,f) { return s+f.saldo; }, 0);
-  document.getElementById('deuda-total-val').textContent = fmt(total);
-  document.getElementById('deuda-count').textContent     = deudaFiltered.length + ' documentos';
-
+function renderDeudaTable() {
   var tramoColors = { al_dia:'#27ae60', d_1_30:'#f39c12', d_31_60:'#e67e22', d_61_90:'#e74c3c', d_91_120:'#c0392b', antiguos:'#7f0000' };
-  var tramoLabels = { al_dia:'Al día', d_1_30:'1-30 días', d_31_60:'31-60 días', d_61_90:'61-90 días', d_91_120:'91-120 días', antiguos:'+120 días' };
+  var tramoLabels = { al_dia:'Al día', d_1_30:'1-30d', d_31_60:'31-60d', d_61_90:'61-90d', d_91_120:'91-120d', antiguos:'+120d' };
+
+  var total  = deudaFiltered.reduce(function(s,f) { return s+f.saldo; }, 0);
+  document.getElementById('deuda-total-val').textContent = fmt(total);
+  document.getElementById('deuda-count').textContent = deudaFiltered.length + ' documentos';
 
   var tbody = document.getElementById('deuda-body');
   if (!deudaFiltered.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="empty-row">Sin resultados</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="empty-row">Sin resultados</td></tr>';
     return;
   }
   tbody.innerHTML = deudaFiltered.map(function(f) {
-    var color = tramoColors[f.tramo] || '#999';
-    var label = tramoLabels[f.tramo] || f.tramo;
-    var badge = '<span class="sbadge" style="background:'+color+'22;color:'+color+'">'+label+'</span>';
+    var color  = tramoColors[f.tramo] || '#999';
+    var tlabel = tramoLabels[f.tramo] || f.tramo;
+    var tramoBadge = '<span class="sbadge" style="background:'+color+'22;color:'+color+'">'+tlabel+'</span>';
     var isAper = (f.move_name||'').startsWith('APER/');
     var tipoBadge = isAper
       ? '<span class="sbadge" style="background:#e8f0fe;color:#1a73e8">Apertura</span>'
@@ -1960,16 +2099,15 @@ function filterDeuda() {
     var pdfUrl  = 'https://temponovo.odoo.com/report/pdf/reports_temponovo.report_invoice_temponovo/' + f.move_id;
     var xlsxUrl = 'https://temponovo.odoo.com/report/xlsx/reports_temponovo.invoice_xlsx/' + f.move_id;
     return '<tr>' +
-      '<td class="mono" style="font-size:11px;color:var(--teal-dark)">' + esc(f.doc) + '</td>' +
-      '<td class="mono" style="font-size:11px;color:var(--text-muted)">' + esc(f.ref||'—') + '</td>' +
-      '<td>'+tipoBadge+'</td>' +
-      '<td style="font-size:12px">'+esc(f.fecha)+'</td>' +
-      '<td style="font-size:12px">'+esc(f.vencimiento||'—')+'</td>' +
-
-      '<td style="text-align:right;font-weight:600">'+fmt(f.saldo)+'</td>' +
+      '<td class="mono" style="font-size:12px;color:var(--teal-dark)">' + esc(f.doc) + '</td>' +
+      '<td>' + tipoBadge + '</td>' +
+      '<td style="font-size:12px;white-space:nowrap">' + esc(f.fecha) + '</td>' +
+      '<td style="font-size:12px;white-space:nowrap">' + esc(f.vencimiento||'—') + '</td>' +
+      '<td>' + tramoBadge + '</td>' +
+      '<td style="text-align:right;font-weight:600">' + fmt(f.saldo) + '</td>' +
       '<td style="white-space:nowrap">' +
-        '<a href="'+pdfUrl+'" target="_blank" class="btn btn-outline btn-sm" style="margin-right:4px" title="PDF">📄 PDF</a>' +
-        '<a href="'+xlsxUrl+'" target="_blank" class="btn btn-outline btn-sm" title="Excel">📊 XLS</a>' +
+        '<a href="'+pdfUrl+'" target="_blank" class="btn btn-outline btn-sm" style="margin-right:3px">📄</a>' +
+        '<a href="'+xlsxUrl+'" target="_blank" class="btn btn-outline btn-sm">📊</a>' +
       '</td>' +
     '</tr>';
   }).join('');
@@ -1985,6 +2123,7 @@ function dlDeudaCSV() {
   });
   dlCSV(rows, 'deuda_temponovo_'+new Date().toISOString().split('T')[0]+'.csv');
 }
+
 
 
 // ── CONVERTIR FACTURA ────────────────────────────────────────────
