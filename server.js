@@ -360,10 +360,8 @@ app.get('/api/me', (req, res) => {
   const code    = (req.headers['x-client-code'] || '').toUpperCase();
   const cliente = getCliente(code);
   if (!cliente) return res.status(401).json({ error: 'Código no reconocido' });
-  req.clientName = cliente.name;
-  req.partnerId  = cliente.partnerId;
-  const cliente = CLIENTES[req.clientCode] || {};
-  res.json({ name: req.clientName, partnerId: req.partnerId, sucursales: cliente.sucursales || [] });
+  const clienteData = CLIENTES[code] || {};
+  res.json({ name: cliente.name, partnerId: cliente.partnerId, sucursales: clienteData.sucursales || [] });
 });
 
 // ── Health check ──────────────────────────────────────────────────
