@@ -284,7 +284,7 @@ app.get('/api/deuda', requireApiKey, async (req, res) => {
     const moveIds = [...new Set(lineas.map(l => Array.isArray(l.move_id) ? l.move_id[0] : l.move_id).filter(Boolean))];
     const moves   = await xmlrpcCall('account.move', 'read', [
       moveIds,
-      ['id', 'name', 'ref', 'invoice_date', 'invoice_date_due', 'move_type']
+      ['id', 'name', 'ref', 'invoice_origin', 'invoice_date', 'invoice_date_due', 'move_type']
     ]);
     const moveMap = {};
     moves.forEach(m => moveMap[m.id] = m);
@@ -322,10 +322,11 @@ app.get('/api/deuda', requireApiKey, async (req, res) => {
         docLabel = moveName + ' – ' + lineNom;
       }
 
+      if (facturas.length === 0) console.log('[DEUDA DEBUG] move fields:', JSON.stringify({ name: move.name, ref: move.ref, invoice_origin: move.invoice_origin }));
       facturas.push({
         doc:         docLabel,
         move_name:   moveName,
-        ref:         move.invoice_origin || move.ref || '',
+        ref:         (move.invoice_origin && move.invoice_origin !== false) ? move.invoice_origin : ((move.ref && move.ref !== false) ? move.ref : ''),
         fecha:       move.invoice_date || l.date || '',
         vencimiento: l.date_maturity   || move.invoice_date_due || '',
         dias:        dias,
@@ -364,6 +365,78 @@ app.get('/api/me', (req, res) => {
 });
 
 // ── Health check ──────────────────────────────────────────────────
+
+// ── PAGOS ─────────────────────────────────────────────────────────
+app.get('/api/pagos', requireApiKey, async (req, res) => {
+  try {
+    const partnerId = req.partnerId;
+
+    // Buscar cuentas por cobrar
+    let receivableIds = await xmlrpcCall('account.account', 'search', [[
+      ['code', '=like', 'A110402%']
+    ]]);
+    if (!receivableIds.length) {
+      receivableIds = await xmlrpcCall('account.account', 'search', [[
+        ['account_type', '=', 'asset_receivable']
+      ]]);
+    }
+
+    // Buscar líneas YA reconciliadas (pagos aplicados)
+    const amlIds = await xmlrpcCall('account.move.line', 'search', [[
+      ['account_id',        'in',  receivableIds],
+      ['move_id.state',     '=',   'posted'],
+      ['partner_id',        '=',   partnerId],
+      ['full_reconcile_id', '!=',  false],
+      ['credit',            '>',   0]
+    ]]);
+
+    if (!amlIds.length) return res.json([]);
+
+    const amls = await xmlrpcCall('account.move.line', 'read', [
+      amlIds,
+      ['move_id', 'date', 'credit', 'name', 'full_reconcile_id', 'ref']
+    ]);
+
+    // Agrupar por asiento de pago
+    const byMove = {};
+    amls.forEach(l => {
+      const moveId = Array.isArray(l.move_id) ? l.move_id[0] : l.move_id;
+      const moveName = Array.isArray(l.move_id) ? l.move_id[1] : '';
+      if (!byMove[moveId]) byMove[moveId] = { moveId, moveName, fecha: l.date, total: 0, lineas: 0 };
+      byMove[moveId].total  += parseFloat(l.credit || 0);
+      byMove[moveId].lineas += 1;
+    });
+
+    // Leer asientos para obtener nombre y estado
+    const moveIds = Object.keys(byMove).map(Number);
+    const moves   = await xmlrpcCall('account.move', 'read', [
+      moveIds,
+      ['id', 'name', 'date', 'state', 'invoice_origin', 'ref']
+    ]);
+
+    const result = moves
+      .sort((a,b) => (a.date < b.date ? 1 : -1))
+      .map(m => {
+        const g = byMove[m.id] || {};
+        // Es conciliado si tiene lineas reconciliadas
+        const reconcile_status = g.lineas > 0 ? 'full' : 'open';
+        return {
+          name:               m.name || '',
+          fecha:              m.date || '',
+          monto:              g.total || 0,
+          state:              m.state || '',
+          reconcile_status,
+          facturas_aplicadas: m.invoice_origin || m.ref || (g.lineas + ' línea(s)') || '—'
+        };
+      });
+
+    res.json(result);
+  } catch(e) {
+    console.error('❌ /api/pagos', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/health', (req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 
 const PORT = process.env.PORT || 3000;
