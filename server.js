@@ -409,7 +409,7 @@ app.get('/api/pagos', requireApiKey, async (req, res) => {
     const cachedPagos = cacheGet(pagosKey);
     if (cachedPagos) return res.json(cachedPagos);
 
-    // Buscar cuentas por cobrar
+    // Buscar cuentas por cobrar A110402
     let receivableIds = await xmlrpcCall('account.account', 'search', [[
       ['code', '=like', 'A110402%']
     ]]);
@@ -419,52 +419,68 @@ app.get('/api/pagos', requireApiKey, async (req, res) => {
       ]]);
     }
 
-    // Buscar líneas YA reconciliadas (pagos aplicados)
+    // Buscar TODAS las líneas con crédito en cuenta por cobrar del partner
+    // Incluye pagos totales Y parciales (no filtramos por full_reconcile_id)
     const amlIds = await xmlrpcCall('account.move.line', 'search', [[
-      ['account_id',        'in',  receivableIds],
-      ['move_id.state',     '=',   'posted'],
-      ['partner_id',        '=',   partnerId],
-      ['full_reconcile_id', '!=',  false],
-      ['credit',            '>',   0]
+      ['account_id',    'in',  receivableIds],
+      ['move_id.state', '=',   'posted'],
+      ['partner_id',    '=',   partnerId],
+      ['credit',        '>',   0]
     ]]);
 
     if (!amlIds.length) return res.json([]);
 
     const amls = await xmlrpcCall('account.move.line', 'read', [
       amlIds,
-      ['move_id', 'date', 'credit', 'name', 'full_reconcile_id', 'ref']
+      ['move_id', 'date', 'credit', 'name', 'full_reconcile_id', 'amount_residual', 'ref']
     ]);
 
-    // Agrupar por asiento de pago
+    // Agrupar por asiento (move_id)
     const byMove = {};
     amls.forEach(l => {
-      const moveId = Array.isArray(l.move_id) ? l.move_id[0] : l.move_id;
+      const moveId   = Array.isArray(l.move_id) ? l.move_id[0] : l.move_id;
       const moveName = Array.isArray(l.move_id) ? l.move_id[1] : '';
-      if (!byMove[moveId]) byMove[moveId] = { moveId, moveName, fecha: l.date, total: 0, lineas: 0 };
+      if (!byMove[moveId]) byMove[moveId] = {
+        moveId, moveName, fecha: l.date,
+        total: 0, saldo: 0, lineas: 0, conciliadas: 0
+      };
       byMove[moveId].total  += parseFloat(l.credit || 0);
       byMove[moveId].lineas += 1;
+      // Si full_reconcile_id existe → conciliada completamente
+      if (l.full_reconcile_id) byMove[moveId].conciliadas += 1;
+      // amount_residual < 0 en líneas de crédito = saldo pendiente de aplicar
+      const residual = parseFloat(l.amount_residual || 0);
+      if (residual < 0) byMove[moveId].saldo += Math.abs(residual);
     });
 
-    // Leer asientos para obtener nombre y estado
+    // Leer asientos para nombre y referencia
     const moveIds = Object.keys(byMove).map(Number);
     const moves   = await xmlrpcCall('account.move', 'read', [
       moveIds,
-      ['id', 'name', 'date', 'state', 'invoice_origin', 'ref']
+      ['id', 'name', 'date', 'state', 'invoice_origin', 'ref', 'move_type']
     ]);
 
+    // Filtrar solo asientos de pago (no facturas)
+    // move_type de pagos es 'entry', facturas son 'out_invoice' etc
     const result = moves
-      .sort((a,b) => (a.date < b.date ? 1 : -1))
+      .filter(m => m.move_type === 'entry' || !m.move_type)
+      .sort((a, b) => (a.date < b.date ? 1 : -1))
       .map(m => {
         const g = byMove[m.id] || {};
-        // Es conciliado si tiene lineas reconciliadas
-        const reconcile_status = g.lineas > 0 ? 'full' : 'open';
+        // Estado conciliación
+        let reconcile_status;
+        if (g.saldo > 0.01)                          reconcile_status = 'open';      // tiene saldo sin aplicar
+        else if (g.conciliadas === g.lineas)          reconcile_status = 'full';      // todo conciliado
+        else                                          reconcile_status = 'partial';   // parcialmente conciliado
+
         return {
           name:               m.name || '',
           fecha:              m.date || '',
           monto:              g.total || 0,
+          saldo_pendiente:    g.saldo || 0,
           state:              m.state || '',
           reconcile_status,
-          facturas_aplicadas: m.invoice_origin || m.ref || (g.lineas + ' línea(s)') || '—'
+          ref:                m.invoice_origin || m.ref || ''
         };
       });
 
@@ -474,7 +490,7 @@ app.get('/api/pagos', requireApiKey, async (req, res) => {
     console.error('❌ /api/pagos', e.message);
     res.status(500).json({ error: e.message });
   }
-});
+});;
 
 app.get('/health', (req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 

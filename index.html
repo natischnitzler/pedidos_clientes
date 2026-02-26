@@ -829,11 +829,8 @@ table.grid tr:last-child td { border-bottom:none; }
         <input id="stock-search" class="filter-input" type="text"
           placeholder="SKU, descripción, código de barra..."
           oninput="filterStock()"/>
-        <select id="stock-cat" class="filter-select" onchange="onCatChange()">
+        <select id="stock-cat" class="filter-select" onchange="filterStock()">
           <option value="">Todas las categorías</option>
-        </select>
-        <select id="stock-fam" class="filter-select" onchange="filterStock()">
-          <option value="">Todas las familias</option>
         </select>
         <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;white-space:nowrap">
           <input type="checkbox" id="stock-only" onchange="filterStock()"
@@ -982,10 +979,11 @@ table.grid tr:last-child td { border-bottom:none; }
             <table class="htable" style="table-layout:fixed;width:100%">
               <thead><tr>
                 <th style="width:140px">Referencia</th>
-                <th style="width:110px">Fecha</th>
+                <th style="width:100px">Fecha</th>
                 <th style="width:110px">Monto</th>
+                <th style="width:110px">Saldo pend.</th>
                 <th style="width:130px">Estado</th>
-                <th style="width:160px">Factura aplicada</th>
+                <th style="width:130px">Ref. pedido</th>
               </tr></thead>
               <tbody id="pagos-body"></tbody>
             </table>
@@ -1824,7 +1822,6 @@ function buildCats() {
 
 function initStockTab() {
   if (stockData.length) {
-    // Populate category dropdown
     var catSel = document.getElementById('stock-cat');
     catSel.innerHTML = '<option value="">Todas las categorías</option>';
     Object.keys(CATS).sort().forEach(function(k) {
@@ -1835,29 +1832,16 @@ function initStockTab() {
   }
 }
 
-function onCatChange() {
-  var cat = document.getElementById('stock-cat').value;
-  var famSel = document.getElementById('stock-fam');
-  famSel.innerHTML = '<option value="">Todas las familias</option>';
-  if (cat && CATS[cat]) {
-    CATS[cat].fams.forEach(function(f) {
-      var o = document.createElement('option');
-      o.value = f; o.textContent = f; famSel.appendChild(o);
-    });
-  }
-  filterStock();
-}
+
 
 function filterStock() {
   var raw  = normalize(document.getElementById('stock-search').value||'');
   var cat  = document.getElementById('stock-cat').value;
-  var fam  = document.getElementById('stock-fam').value;
   var only = document.getElementById('stock-only').checked;
 
   stockFiltered = stockData.filter(function(p) {
     if (only && p.stock <= 0) return false;
     if (cat && p.cat !== cat) return false;
-    if (fam && p.fam !== fam) return false;
     if (raw) {
       var sk = normalize(p.sku);
       var de = normalize(p.des);
@@ -2021,16 +2005,19 @@ async function loadPagos() {
       var RECON  = { full:'Conciliado', partial:'Parcial', open:'Sin conciliar' };
       var RCOLOR = { full:'#27ae60', partial:'#e67e22', open:'#e74c3c' };
       tbody.innerHTML = pagosAll.map(function(p) {
-        var estLabel  = ESTADO[p.state] || p.state;
-        var reconKey  = p.reconcile_status || 'open';
-        var reconLbl  = RECON[reconKey]  || reconKey;
+        var reconKey   = p.reconcile_status || 'open';
+        var reconLbl   = RECON[reconKey]  || reconKey;
         var reconColor = RCOLOR[reconKey] || '#999';
+        var saldoCell  = p.saldo_pendiente > 0
+          ? '<span style="color:var(--red);font-weight:600">' + fmt(p.saldo_pendiente) + '</span>'
+          : '<span style="color:#27ae60">—</span>';
         return '<tr>' +
           '<td class="mono" style="font-size:12px;color:var(--teal-dark)">' + esc(p.name) + '</td>' +
-          '<td style="font-size:12px">' + esc(p.fecha) + '</td>' +
+          '<td style="font-size:12px;white-space:nowrap">' + esc(p.fecha) + '</td>' +
           '<td style="font-size:13px;font-weight:600">' + fmt(p.monto) + '</td>' +
+          '<td>' + saldoCell + '</td>' +
           '<td><span class="sbadge" style="background:'+reconColor+'22;color:'+reconColor+'">' + reconLbl + '</span></td>' +
-          '<td style="font-size:11px;color:var(--text-muted)">' + esc(p.facturas_aplicadas||'—') + '</td>' +
+          '<td class="mono" style="font-size:11px;color:var(--text-muted)">' + esc(p.ref||'—') + '</td>' +
         '</tr>';
       }).join('');
       document.getElementById('pagos-result').style.display = 'block';
