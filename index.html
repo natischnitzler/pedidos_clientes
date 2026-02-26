@@ -663,12 +663,12 @@ table.grid tr:last-child td { border-bottom:none; }
       <div id="login-title-fallback" style="display:none;font-size:22px;font-weight:700;color:var(--teal)">TEMPONOVO</div>
     </div>
     <div class="login-title">Portal de Clientes</div>
-    <div class="login-sub">Ingresa tu API Key para continuar</div>
-    <label class="login-label" for="client-code-input">Código de acceso</label>
-    <input id="client-code-input" class="login-input" type="text"
-           placeholder="Ej: LARELOJERIA"
+    <div class="login-sub">Ingresa tu clave de acceso para continuar</div>
+    <label class="login-label" for="client-code-input">Clave de acceso</label>
+    <input id="client-code-input" class="login-input" type="password"
+           placeholder="Ingresa tu clave"
            onkeydown="if(event.key==='Enter') doLogin()"
-           style="text-transform:uppercase;letter-spacing:1px"/>
+           style="letter-spacing:2px"/>
     <button class="login-btn" id="login-btn" onclick="doLogin()">Ingresar</button>
     <div class="login-error" id="login-error"></div>
   </div>
