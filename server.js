@@ -14,7 +14,39 @@ const ODOO_PASS = process.env.ODOO_PASSWORD || '';
 
 // ── CLIENTES ─────────────────────────────────────────────────────
 // Agregar nuevos clientes aquí
-const CLIENTES = {
+// ── CARGAR CLIENTES DESDE CSV ────────────────────────────────────
+const fs   = require('fs');
+const path = require('path');
+
+function loadClientes() {
+  const file = path.join(__dirname, 'clientes.csv');
+  if (!fs.existsSync(file)) {
+    console.warn('⚠ No se encontró clientes.csv');
+    return {};
+  }
+  const lines = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean);
+  const result = {};
+  // Saltar header
+  for (let i = 1; i < lines.length; i++) {
+    const parts = lines[i].match(/(".*?"|[^,]+)(?=,|$)/g);
+    if (!parts || parts.length < 4) continue;
+    const codigo    = (parts[0]||'').trim().toUpperCase();
+    const nombre    = (parts[1]||'').trim();
+    const partnerId = parseInt(parts[2]||'0', 10);
+    const apiKey    = (parts[3]||'').trim();
+    const sucRaw    = (parts[4]||'').replace(/"/g,'').trim();
+    const sucursales = sucRaw ? sucRaw.split(',').map(s=>s.trim()) : [];
+    if (codigo && apiKey && partnerId) {
+      result[codigo] = { apiKey, partnerId, name: nombre, sucursales };
+    }
+  }
+  console.log('✅ Clientes cargados:', Object.keys(result).join(', '));
+  return result;
+}
+
+const CLIENTES = loadClientes();
+
+const _CLIENTES_COMPAT = {
   'LARELOJERIA': {
     apiKey:    process.env.APIKEY_LARELOJERIA || '22f7ebb65ec6646888a4c22028a854e39e310b31c5461cc52d22e835d92d5bd6',
     partnerId: 51666,
