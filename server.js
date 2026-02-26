@@ -108,6 +108,25 @@ async function requireApiKey(req, res, next) {
   next();
 }
 
+// ── CACHÉ EN MEMORIA ─────────────────────────────────────────────
+const cache = {};
+const CACHE_TTL = {
+  stock:    15 * 60 * 1000,  // 15 min
+  deuda:     5 * 60 * 1000,  //  5 min
+  historial: 2 * 60 * 1000,  //  2 min
+  pagos:     5 * 60 * 1000,  //  5 min
+};
+
+function cacheGet(key) {
+  const entry = cache[key];
+  if (!entry) return null;
+  if (Date.now() - entry.ts > entry.ttl) { delete cache[key]; return null; }
+  return entry.data;
+}
+function cacheSet(key, data, ttl) {
+  cache[key] = { data, ts: Date.now(), ttl };
+}
+
 // ── GET /api/stock ────────────────────────────────────────────────
 // Proxy a Odoo REST con la API key del cliente (incluye sus precios)
 app.get('/api/stock', async (req, res) => {
@@ -115,8 +134,13 @@ app.get('/api/stock', async (req, res) => {
     const code    = (req.headers['x-client-code'] || '').toUpperCase();
     const cliente = getCliente(code);
     if (!cliente) return res.status(401).json({ error: 'Código no reconocido' });
+    const cacheKey = 'stock_' + code;
+    const cached = cacheGet(cacheKey);
+    if (cached) return res.json(cached);
+
     const r = await odooProxy('/api/stock', cliente.apiKey);
     if (!r.ok) return res.status(r.status).json({ error: 'Error Odoo stock', detail: r.data });
+    cacheSet(cacheKey, r.data, CACHE_TTL.stock);
     res.json(r.data);
   } catch(e) {
     console.error('❌ /api/stock', e.message);
@@ -162,6 +186,10 @@ app.get('/api/historial', requireApiKey, async (req, res) => {
   try {
     // 1. Buscar partner
     const partnerId = req.partnerId;
+
+    const histKey = 'hist_' + partnerId + '_' + (req.query.from||'') + '_' + (req.query.to||'');
+    const cachedHist = cacheGet(histKey);
+    if (cachedHist) return res.json(cachedHist);
 
     // 2. Buscar ventas del partner (filtrar por fecha si se pasa)
     const fromDate = req.query.from || null;
@@ -228,6 +256,7 @@ app.get('/api/historial', requireApiKey, async (req, res) => {
       };
     }));
 
+    cacheSet(histKey, result, CACHE_TTL.historial);
     res.json(result);
   } catch(e) {
     console.error('❌ /api/historial', e.message);
@@ -242,6 +271,10 @@ app.get('/api/deuda', requireApiKey, async (req, res) => {
   try {
     const partnerId = req.partnerId;
     const hoy = new Date();
+
+    const deudaKey = 'deuda_' + partnerId;
+    const cachedDeuda = cacheGet(deudaKey);
+    if (cachedDeuda) return res.json(cachedDeuda);
 
     // 1. Buscar cuentas por cobrar (A110402)
     let receivableIds = await xmlrpcCall('account.account', 'search', [
@@ -323,7 +356,6 @@ app.get('/api/deuda', requireApiKey, async (req, res) => {
         docLabel = moveName + ' – ' + lineNom;
       }
 
-      if (facturas.length === 0) console.log('[DEUDA DEBUG] move fields:', JSON.stringify({ name: move.name, ref: move.ref, invoice_origin: move.invoice_origin }));
       facturas.push({
         doc:         docLabel,
         move_name:   moveName,
@@ -347,6 +379,8 @@ app.get('/api/deuda', requireApiKey, async (req, res) => {
     // Ordenar por fecha
     facturas.sort((a, b) => a.fecha > b.fecha ? -1 : 1);
 
+    cacheSet(deudaKey, { facturas, resumen }, CACHE_TTL.deuda);
+    cacheSet(deudaKey, { facturas, resumen }, CACHE_TTL.deuda);
     res.json({ facturas, resumen });
   } catch(e) {
     console.error('❌ /api/deuda', e.message);
@@ -370,6 +404,10 @@ app.get('/api/me', (req, res) => {
 app.get('/api/pagos', requireApiKey, async (req, res) => {
   try {
     const partnerId = req.partnerId;
+
+    const pagosKey = 'pagos_' + partnerId;
+    const cachedPagos = cacheGet(pagosKey);
+    if (cachedPagos) return res.json(cachedPagos);
 
     // Buscar cuentas por cobrar
     let receivableIds = await xmlrpcCall('account.account', 'search', [[
@@ -430,6 +468,7 @@ app.get('/api/pagos', requireApiKey, async (req, res) => {
         };
       });
 
+    cacheSet(pagosKey, result, CACHE_TTL.pagos);
     res.json(result);
   } catch(e) {
     console.error('❌ /api/pagos', e.message);
