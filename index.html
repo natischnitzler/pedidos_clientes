@@ -978,12 +978,10 @@ table.grid tr:last-child td { border-bottom:none; }
           <div style="overflow-x:auto">
             <table class="htable" style="table-layout:fixed;width:100%">
               <thead><tr>
-                <th style="width:140px">Referencia</th>
-                <th style="width:100px">Fecha</th>
-                <th style="width:110px">Monto</th>
-                <th style="width:110px">Saldo pend.</th>
-                <th style="width:130px">Estado</th>
-                <th style="width:130px">Ref. pedido</th>
+                <th style="width:180px">Referencia</th>
+                <th style="width:120px">Fecha</th>
+                <th style="width:140px">Monto</th>
+                <th style="width:140px">Estado</th>
               </tr></thead>
               <tbody id="pagos-body"></tbody>
             </table>
@@ -2001,23 +1999,15 @@ async function loadPagos() {
       document.getElementById('pagos-empty').style.display = 'flex';
     } else {
       var tbody = document.getElementById('pagos-body');
-      var ESTADO = { posted:'Confirmado', draft:'Borrador', cancel:'Cancelado' };
-      var RECON  = { full:'Conciliado', partial:'Parcial', open:'Sin conciliar' };
-      var RCOLOR = { full:'#27ae60', partial:'#e67e22', open:'#e74c3c' };
       tbody.innerHTML = pagosAll.map(function(p) {
-        var reconKey   = p.reconcile_status || 'open';
-        var reconLbl   = RECON[reconKey]  || reconKey;
-        var reconColor = RCOLOR[reconKey] || '#999';
-        var saldoCell  = p.saldo_pendiente > 0
-          ? '<span style="color:var(--red);font-weight:600">' + fmt(p.saldo_pendiente) + '</span>'
-          : '<span style="color:#27ae60">—</span>';
+        var badge = p.conciliado
+          ? '<span class="sbadge" style="background:#27ae6022;color:#27ae60">✓ Conciliado</span>'
+          : '<span class="sbadge" style="background:#e67e2222;color:#e67e22">Pendiente</span>';
         return '<tr>' +
           '<td class="mono" style="font-size:12px;color:var(--teal-dark)">' + esc(p.name) + '</td>' +
           '<td style="font-size:12px;white-space:nowrap">' + esc(p.fecha) + '</td>' +
           '<td style="font-size:13px;font-weight:600">' + fmt(p.monto) + '</td>' +
-          '<td>' + saldoCell + '</td>' +
-          '<td><span class="sbadge" style="background:'+reconColor+'22;color:'+reconColor+'">' + reconLbl + '</span></td>' +
-          '<td class="mono" style="font-size:11px;color:var(--text-muted)">' + esc(p.ref||'—') + '</td>' +
+          '<td>' + badge + '</td>' +
         '</tr>';
       }).join('');
       document.getElementById('pagos-result').style.display = 'block';
