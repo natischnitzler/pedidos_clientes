@@ -407,7 +407,8 @@ app.get('/api/pagos', requireApiKey, async (req, res) => {
 
     const pagosKey = 'pagos_' + partnerId;
     const cached = cacheGet(pagosKey);
-    if (cached) return res.json(cached);
+    if (cached) { console.log('[PAGOS] desde caché'); return res.json(cached); }
+    console.log('[PAGOS] buscando para partnerId:', partnerId);
 
     // Cuentas por cobrar
     let receivableIds = await xmlrpcCall('account.account', 'search', [[
@@ -468,7 +469,7 @@ app.get('/api/pagos', requireApiKey, async (req, res) => {
     cacheSet(pagosKey, result, CACHE_TTL.pagos);
     res.json(result);
   } catch(e) {
-    console.error('❌ /api/pagos', e.message);
+    console.error('❌ /api/pagos', e.message, e.stack);
     res.status(500).json({ error: e.message });
   }
 });;;;;
