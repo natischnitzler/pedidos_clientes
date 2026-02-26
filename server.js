@@ -431,7 +431,7 @@ app.get('/api/pagos', requireApiKey, async (req, res) => {
 
     const amls = await xmlrpcCall('account.move.line', 'read', [
       amlIds,
-      ['move_id', 'date', 'credit', 'full_reconcile_id', 'amount_residual']
+      ['move_id', 'date', 'credit', 'full_reconcile_id']
     ]);
 
     // Agrupar por asiento
@@ -440,7 +440,6 @@ app.get('/api/pagos', requireApiKey, async (req, res) => {
       const moveId = Array.isArray(l.move_id) ? l.move_id[0] : l.move_id;
       if (!byMove[moveId]) byMove[moveId] = { fecha: l.date, total: 0, residual: 0, lineas: 0, conciliadas: 0 };
       byMove[moveId].total      += parseFloat(l.credit || 0);
-      byMove[moveId].residual   += Math.abs(parseFloat(l.amount_residual || 0));
       byMove[moveId].lineas     += 1;
       if (l.full_reconcile_id) byMove[moveId].conciliadas += 1;
     });
@@ -457,8 +456,8 @@ app.get('/api/pagos', requireApiKey, async (req, res) => {
       .sort((a, b) => (a.date < b.date ? 1 : -1))
       .map(m => {
         const g = byMove[m.id] || {};
-        // Conciliado si no queda residual
-        const conciliado = g.residual < 1;
+        // Conciliado si TODAS las líneas tienen full_reconcile_id
+        const conciliado = g.lineas > 0 && g.conciliadas === g.lineas;
         return {
           name:        m.name || '',
           fecha:       m.date || '',
