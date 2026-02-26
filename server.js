@@ -409,58 +409,30 @@ app.get('/api/pagos', requireApiKey, async (req, res) => {
     const cached = cacheGet(pagosKey);
     if (cached) return res.json(cached);
 
-    // Cuentas por cobrar
-    let receivableIds = await xmlrpcCall('account.account', 'search', [[
-      ['code', '=like', 'A110402%']
-    ]]);
-    if (!receivableIds.length) {
-      receivableIds = await xmlrpcCall('account.account', 'search', [[
-        ['account_type', '=', 'asset_receivable']
-      ]]);
-    }
-
-    // Líneas de crédito del partner (= pagos recibidos)
-    const amlIds = await xmlrpcCall('account.move.line', 'search', [[
-      ['account_id',    'in', receivableIds],
-      ['move_id.state', '=',  'posted'],
-      ['partner_id',    '=',  partnerId],
-      ['credit',        '>',  0]
+    // Buscar pagos directamente en account.payment
+    const payIds = await xmlrpcCall('account.payment', 'search', [[
+      ['partner_id',   '=',  partnerId],
+      ['payment_type', '=',  'inbound'],
+      ['state',        'not in', ['draft', 'cancelled']]
     ]]);
 
-    if (!amlIds.length) return res.json([]);
+    if (!payIds.length) return res.json([]);
 
-    const amls = await xmlrpcCall('account.move.line', 'read', [
-      amlIds,
-      ['move_id', 'date', 'credit', 'full_reconcile_id']
+    const pays = await xmlrpcCall('account.payment', 'read', [
+      payIds,
+      ['name', 'date', 'amount', 'state', 'reconciled_invoice_ids']
     ]);
 
-    // Agrupar por asiento
-    const byMove = {};
-    amls.forEach(l => {
-      const moveId = Array.isArray(l.move_id) ? l.move_id[0] : l.move_id;
-      if (!byMove[moveId]) byMove[moveId] = { fecha: l.date, total: 0, residual: 0, lineas: 0, conciliadas: 0 };
-      byMove[moveId].total      += parseFloat(l.credit || 0);
-      byMove[moveId].lineas     += 1;
-      if (l.full_reconcile_id) byMove[moveId].conciliadas += 1;
-    });
-
-    // Leer nombre del asiento
-    const moveIds = Object.keys(byMove).map(Number);
-    const moves   = await xmlrpcCall('account.move', 'read', [
-      moveIds,
-      ['id', 'name', 'date', 'move_type']
-    ]);
-
-    const result = moves
-      .filter(m => !['out_invoice','in_invoice','out_refund','in_refund'].includes(m.move_type))
+    const result = pays
       .sort((a, b) => (a.date < b.date ? 1 : -1))
-      .map(m => {
-        const g = byMove[m.id] || {};
-        const conciliado = g.lineas > 0 && g.conciliadas >= g.lineas - 1;
+      .map(p => {
+        const invIds = p.reconciled_invoice_ids || [];
+        // Conciliado si tiene facturas aplicadas
+        const conciliado = invIds.length > 0;
         return {
-          name:        m.name || '',
-          fecha:       m.date || '',
-          monto:       g.total || 0,
+          name:      p.name || '',
+          fecha:     p.date || '',
+          monto:     parseFloat(p.amount || 0),
           conciliado
         };
       });
@@ -471,7 +443,7 @@ app.get('/api/pagos', requireApiKey, async (req, res) => {
     console.error('❌ /api/pagos', e.message);
     res.status(500).json({ error: e.message });
   }
-});;;
+});;;;
 
 app.get('/health', (req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 
