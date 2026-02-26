@@ -456,8 +456,8 @@ app.get('/api/pagos', requireApiKey, async (req, res) => {
       .sort((a, b) => (a.date < b.date ? 1 : -1))
       .map(m => {
         const g = byMove[m.id] || {};
-        // Conciliado si TODAS las líneas tienen full_reconcile_id
         const conciliado = g.lineas > 0 && g.conciliadas === g.lineas;
+        console.log('[PAGO]', m.name, '| lineas:', g.lineas, '| conciliadas:', g.conciliadas, '| conciliado:', conciliado);
         return {
           name:        m.name || '',
           fecha:       m.date || '',
