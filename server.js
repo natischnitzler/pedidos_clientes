@@ -484,6 +484,7 @@ app.get('/api/pagos', requireApiKey, async (req, res) => {
         };
       });
 
+    console.log('[PAGOS DEBUG] total encontrados:', result.length, 'primero:', result[0] ? JSON.stringify(result[0]) : 'ninguno');
     cacheSet(pagosKey, result, CACHE_TTL.pagos);
     res.json(result);
   } catch(e) {
